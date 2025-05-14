@@ -1,5 +1,9 @@
 const API_BASE_URL = "https://auto-gens.com";
-const apiKey = import.meta.env.VITE_API_KEY || "secret-key";
+const apiKey = (
+  typeof import.meta !== 'undefined' &&
+  import.meta.env &&
+  import.meta.env.VITE_API_KEY
+) || "secret-key";
 
 // GET-запрос
 export async function apiGet(endpoint, params, init_data) {
