@@ -24,7 +24,7 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
         with:
-          project_id: autogen-1-438415  # или подставь своё значение
+          project_id: autogen-1-438415
 
       - name: Deploy frontend to GCS
         run: |
