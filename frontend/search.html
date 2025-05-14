@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>По названию</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.07);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 100%;
+            margin: 0 16px;
+            backdrop-filter: blur(6px);
+        }
+
+        h3 {
+            margin-bottom: 20px;
+            font-size: 1.6rem;
+            font-weight: 600;
+            opacity: 0.95;
+        }
+
+        .movie-search {
+            width: 100%;
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .movie-search textarea {
+            flex: 1;
+            height: 44px;
+            padding: 10px;
+            font-size: 15px;
+            border: none;
+            border-radius: 12px;
+            resize: none;
+            outline: none;
+            background: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            font-weight: 500;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .movie-search textarea::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: normal;
+        }
+
+        .movie-search button {
+            padding: 0 16px;
+            font-size: 15px;
+            font-weight: 600;
+            background-color: #1e90ff;
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        .movie-search button:hover {
+            background-color: #187bcd;
+            transform: scale(1.05);
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1002;
+            padding: 10px;
+        }
+
+        .nav-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            transform: translateY(-4px);
+        }
+
+        .nav-button span {
+            font-size: 1.2rem;
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+    <div class="container">
+        <h3>Введите название фильма</h3>
+        <div class="movie-search">
+            <textarea id="movie-input" placeholder="Введите название фильма здесь..."></textarea>
+            <button id="movie-submit">Подтвердить</button>
+        </div>
+    </div>
+    <div class="bottom-nav">
+        <div class="nav-button" onclick="location.href='index.html'">
+            <span>🔍</span>
+            <div>Поиск</div>
+        </div>
+        <div class="nav-button" onclick="location.href='matching.html'">
+            <span>🎬</span>
+            <div>Подбор</div>
+        </div>
+        <div class="nav-button" onclick="location.href='favorites.html'">
+            <span>❤️</span>
+            <div>Избранное</div>
+        </div>
+        <div class="nav-button" onclick="location.href='profile.html'">
+            <span>👤</span>
+            <div>Профиль</div>
+        </div>
+    </div>
+    <script type="module" src="./src/scripts/search.js"></script>
+</body>
+</html>

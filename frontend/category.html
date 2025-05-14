@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0 maximum-scale=1.0, user-scalable=no">
+    <title>Выбор фильма</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.6.1/nouislider.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.6.1/nouislider.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            top: 100px;
+        }
+
+        .progress-step {
+            width: 12px;
+            height: 12px;
+            margin: 0 5px;
+            background: #4a90e2;
+            border-radius: 50%;
+            transition: background 0.3s, transform 0.3s;
+        }
+
+        .progress-step.active {
+            background: #ff416c;
+            transform: scale(1.2);
+        }
+
+        .step-header {
+            text-align: center;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-top: -450px;
+        }
+
+       .step {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+       }
+
+        .step.active {
+            display: flex;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        #categories, #atmospheres {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 5px;
+            max-width: 500px;
+        }
+
+
+        .category, .atmosphere {
+            padding: 10px 16px;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            color: #fff;
+            background: linear-gradient(135deg, #6a11cb, #2575fc);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s, opacity 0.3s;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .category.selected, .atmosphere.selected{
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+        }
+
+        .card-container {
+            align-items: center;
+            width: 100%;
+            max-width: 420px;
+            padding: 30px;
+            background-color: #1c1c1c;
+            border-radius: 12px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            color: #fff;
+            text-align: center;
+        }
+
+        .values {
+            font-size: 19px;
+            font-weight: bold;
+            margin-top: 10px;
+            margin-bottom: 30px;
+            color: #ffffff;
+        }
+
+        #slider {
+            margin: 20px auto 40px;
+            width: 100%;
+        }
+
+        .noUi-handle {
+            width: 26px;
+            height: 26px;
+            background: linear-gradient(145deg, #e6e6e6, #b8b8b8, #f9f9f9);
+            border: 1px solid #8c8c8c;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: inset -2px -2px 4px rgba(255, 255, 255, 0.8),
+                        inset 2px 2px 4px rgba(0, 0, 0, 0.2),
+                        0 2px 5px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            transform: translateY(-5px);
+        }
+
+        .noUi-handle:active {
+            transform: scale(0.95);
+            box-shadow: inset -3px -3px 6px rgba(255, 255, 255, 0.7),
+                        inset 3px 3px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .noUi-target {
+            background: linear-gradient(to right, #c0c0c0, #e0e0e0, #c0c0c0);
+            border-radius: 4px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+            height: 10px;
+        }
+
+        .noUi-connect {
+            background: linear-gradient(to right, #275efe, #00bcd4);
+        }
+
+        .navigation-buttons {
+            display: flex;
+            position: fixed;
+            bottom: 150px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            justify-content: center;
+        }
+
+        .back-btn, .continue-btn {
+            padding: 12px 24px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            color: #fff;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+            transition: opacity 0.3s ease;
+        }
+
+        .back-btn {
+            margin-right: 3px;
+            background: linear-gradient(135deg, #6a11cb, #2575fc);
+        }
+
+        .continue-btn {
+            margin-left: 3px;
+            background: linear-gradient(135deg, #ff416c, #ff4b2b);
+        }
+
+        #prevStep {
+            display: none
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1002;
+            padding: 10px;
+        }
+
+        .nav-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            transform: translateY(-4px);
+        }
+
+        .nav-button span {
+            font-size: 1.2rem;
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+    <div class="progress-bar">
+        <div class="progress-step active"></div>
+        <div class="progress-step"></div>
+        <div class="progress-step"></div>
+    </div>
+
+    <div class="step-header" id="stepHeader">Выбери одну или несколько категорий</div>
+
+    <div id="step1" class="step active">
+        <div id="categories">
+            <button class="category" data-category="комедия">Комедии</button>
+            <button class="category" data-category="мультфильм">Мультфильмы</button>
+            <button class="category" data-category="ужасы">Ужасы</button>
+            <button class="category" data-category="фэнтези">Фэнтези</button>
+            <button class="category" data-category="научная фантастика">Фантастика</button>
+            <button class="category" data-category="триллер">Триллеры</button>
+            <button class="category" data-category="боевик">Боевики</button>
+            <button class="category" data-category="мелодрама">Драмы</button>
+            <button class="category" data-category="драма">Мелодрамы</button>
+            <button class="category" data-category="детектив">Детективы</button>
+            <button class="category" data-category="приключение">Приключения</button>
+            <button class="category" data-category="военный">Военные</button>
+            <button class="category" data-category="семейный">Семейные</button>
+            <button class="category" data-category="документальный">Документальные</button>
+            <button class="category" data-category="историчекий">Исторические</button>
+            <button class="category" data-category="криминал">Криминал</button>
+            <button class="category" data-category="биография">Биографии</button>
+            <button class="category" data-category="вестерн">Вестерны</button>
+            <button class="category" data-category="спортивный">Спортивные</button>
+            <button class="category" data-category="музыка">Музыкальные</button>
+            <button class="category selected" data-category="любой">Не важно</button>
+        </div>
+    </div>
+
+    <div id="step2" class="step">
+        <div id="atmospheres">
+            <button class="atmosphere" data-atmosphere="про любовь">Про любовь</button>
+            <button class="atmosphere" data-atmosphere="душевный и трогательный">Душевные и трогательные</button>
+            <button class="atmosphere" data-atmosphere="динамичный и напряженный">Динамичные и напряженные</button>
+            <button class="atmosphere" data-atmosphere="жизнеутверждающий">Жизнеутверждающие</button>
+            <button class="atmosphere" data-atmosphere="мрачный и атмосферный">Мрачные и атмосферные</button>
+            <button class="atmosphere" data-atmosphere="сюрреалистичный">Сюрреалистичные</button>
+            <button class="atmosphere" data-atmosphere="психологический">Психологические</button>
+            <button class="atmosphere" data-atmosphere="медитативный">Медитативные</button>
+            <button class="atmosphere" data-atmosphere="депрессивный">Депрессивные</button>
+            <button class="atmosphere selected" data-atmosphere="любой">Не важно</button>
+        </div>
+    </div>
+
+    <div id="step3" class="step">
+        <div class="card-container">
+            <div class="values">
+                <span id="first">1990</span> - <span id="second">2025</span>
+            </div>
+            <div id="slider"></div>
+        </div>
+    </div>
+
+    <div class="navigation-buttons">
+        <button class="back-btn" id="prevStep">← Назад</button>
+        <button class="continue-btn" id="nextStep">Далее →</button>
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-button" onclick="location.href='index.html'">
+            <span>🔍</span>
+            <div>Поиск</div>
+        </div>
+        <div class="nav-button" onclick="location.href='matching.html'">
+            <span>🎬</span>
+            <div>Подбор</div>
+        </div>
+        <div class="nav-button" onclick="location.href='favorites.html'">
+            <span>❤️</span>
+            <div>Избранное</div>
+        </div>
+        <div class="nav-button" onclick="location.href='profile.html'">
+            <span>👤</span>
+            <div>Профиль</div>
+        </div>
+    </div>
+
+    <script type="module" src="./src/scripts/category.js"></script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Главная страница</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .balance-display {
+            position: fixed;
+            top: 245px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 8px 14px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1001;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1002;
+            padding: 10px;
+        }
+
+        .nav-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            transform: translateY(-4px);
+        }
+
+        .nav-button span {
+            font-size: 1.2rem;
+        }
+
+        .styled-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            border-radius: 18px;
+            text-align: center;
+            width: 100%;
+            max-width: 220px;
+            min-height: 140px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            margin-bottom: 15px;
+            transition: transform 0.2s ease;
+        }
+
+        .light-card {
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+        }
+
+        .dark-card {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .card-icon {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+
+        .card-text {
+            font-size: 0.9rem;
+            line-height: 1.3;
+            margin-bottom: 10px;
+        }
+
+        .card-button {
+            background-color: #3478F6;
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            font-size: 0.9rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+
+            width: 90%;
+            max-width: 160px;
+            box-sizing: border-box;
+        }
+
+        .horizontal-cards {
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            position: relative;
+            overflow-x: visible;
+            overflow-y: visible;
+            max-width: 100%;
+            padding: 10px 0;
+            justify-content: center;
+            margin-top: -150px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 220px;
+            margin-bottom: 15px;
+        }
+
+        .user-info img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .user-info span {
+            font-size: 1rem;
+            font-weight: bold;
+            color: #ffffff;
+        }
+
+        #shareCard {
+            position: relative;
+        }
+
+        .share-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-10px);
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            border-radius: 10px;
+            font-size: 0.78rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            width: 100%;
+            max-width: 220px;
+            box-sizing: border-box;
+            text-align: left;
+            white-space: normal;
+            word-wrap: break-word;
+            padding: 10px 12px;
+        }
+
+        .tooltip-subtext {
+            font-size: 0.72rem;
+            margin-top: 6px;
+            opacity: 0.85;
+            line-height: 1.3;
+        }
+
+        .share-tooltip .tooltip-text {
+            display: block;
+        }
+
+
+        .share-tooltip.show {
+            display: block;
+            opacity: 1;
+        }
+
+        .share-tooltip .arrow {
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid rgba(0, 0, 0, 0.85);
+        }
+        .tip-arrow {
+            position: absolute;
+            top: -6px;
+            right: 10px;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 6px solid rgba(0, 0, 0, 0.8);
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+
+    <div id="telegram-tip" style="
+      display: none;
+      position: fixed;
+      top: 100px;
+      right: 20px;
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 10px;
+      max-width: 150px;
+    ">
+        <div class="tip-arrow"></div>
+        <div id="tip-text"></div>
+        <div style="margin-top: 5px; text-align: center;">
+        </div>
+    </div>
+
+    <div class="user-info" id="userInfo">
+        <img id="userAvatar" src="" alt="avatar">
+        <span id="userName">Имя</span>
+    </div>
+    <div class="balance-display" id="balanceDisplay">
+        ⭐ <span id="balanceValue">...</span>
+    </div>
+    <div class="main-content">
+        <div class="horizontal-cards">
+            <div class="styled-card light-card" id="donateCard">
+                <div class="card-icon">⭐</div>
+                <div class="card-text">
+                    Приобрести 100 звёзд
+                </div>
+                <button class="card-button">Купить</button>
+            </div>
+
+            <div class="styled-card dark-card" id="shareCard">
+                <div class="card-icon">🤝</div>
+                <div class="card-text">
+                    Поделись с другом ссылкой и получи 10 звёзд
+                </div>
+                <button class="card-button">Поделиться</button>
+                <div class="share-tooltip" id="shareTooltip">
+                    <span class="tooltip-text main-text">Ссылка отправлена!</span>
+                    <span class="tooltip-text tooltip-subtext">
+                        Как только приглашённый друг начнёт использовать приложение — тебе начислятся 10 звёзд.
+                    </span>
+                    <div class="arrow"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="loader">
+        <div class="spinner"></div>
+    </div>
+    <div class="bottom-nav">
+        <div class="nav-button" data-href="index.html">
+            <span>🔍</span>
+            <div>Поиск</div>
+        </div>
+        <div class="nav-button" data-href="matching.html">
+            <span>🎬</span>
+            <div>Подбор</div>
+        </div>
+        <div class="nav-button" data-href="favorites.html">
+            <span>❤️</span>
+            <div>Избранное</div>
+        </div>
+        <div class="nav-button" data-href="profile.html">
+            <span>👤</span>
+            <div>Профиль</div>
+        </div>
+    </div>
+</body>
+<script type="module" src="./src/scripts/profile.js"></script>
+</html>

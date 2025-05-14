@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Избранное</title>
+    <style>
+        html {
+            scroll-behavior: smooth;
+        }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            -webkit-overflow-scrolling: touch;
+            touch-action: manipulation;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding-bottom: 70px;
+        }
+
+        .toggle-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            margin: 10px 0;
+            width: 100%;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.12);
+            transition: 0.4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 15px;
+            width: 15px;
+            left: 4px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background: rgba(0, 136, 255, 0.9);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(18px);
+        }
+
+        #toggleLabel {
+            font-size: 0.8rem;
+            color: #ffffff;
+        }
+
+        #scrollToTop {
+            display: flex;
+            position: fixed;
+            bottom: 65px;
+            right: 8px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #6a11cb, #2575fc);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            transition: opacity 0.3s, transform 0.2s;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #scrollToTop:hover {
+            transform: scale(1.1);
+        }
+
+        .category-block {
+            width: 100%;
+            max-width: none;
+            border-radius: 10px;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .category-block:has(.movies-container.open) {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 10px 10px 20px;
+            transition: background 0.3s ease;
+        }
+
+        .category-block:last-child {
+            margin-bottom: 70px;
+        }
+
+        .category-header {
+            box-sizing: border-box;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            font-size: 0.6rem;
+            color: white;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-align: center;
+        }
+
+        .movies-container {
+            display: none;
+            flex-direction: row;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+
+            opacity: 0;
+            transform: scaleY(0.9);
+            transform-origin: top;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+
+        .movies-container.open {
+            display: flex;
+            opacity: 1;
+            transform: scaleY(1);
+        }
+
+        #favorites-container {
+            max-width: 500px;
+            padding: 0 16px;
+            box-sizing: border-box;
+            margin: 0 auto;
+        }
+
+         #favoriteMovies {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            padding-bottom: 70px;
+        }
+
+         #favoriteMovies.single-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-sizing: border-box;
+            padding: 0;
+         }
+
+         .movie-container {
+            background-color: #1c1c1c;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            max-width: 330px;
+            max-height: 650px;
+            width: 90%;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .movie-container.fade-out {
+          animation: fadeOut 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeOut {
+          from { opacity: 1; transform: scale(1); }
+          to { opacity: 0; transform: scale(0.95); }
+        }
+
+        .movie-card {
+            position: relative;
+            width: 300px;
+            height: 450px;
+            perspective: 1000px;
+        }
+
+         .rating-container {
+            display: flex;
+            gap: 10px;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+
+        .rating-badge {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .rating-badge.kp {
+            top: 0;
+            right: 0;
+            background-color: gray;
+        }
+
+        .rating-badge.imdb {
+            top: 50px;
+            right: 0;
+            background-color: gray;
+        }
+
+        .rating-badge.kp img {
+            position: absolute;
+            width: 23px;
+            height: 23px;
+            top: 0;
+            left: -8px;
+        }
+
+        .rating-badge.imdb img {
+            position: absolute;
+            width: 23px;
+            height: 23px;
+            top: 0;
+            right: 35px;
+        }
+
+        .kinopoisk-logo {
+            width: 20px;
+            height: 20px;
+            top: -5px;
+            left: -5px;
+            border-radius: 50%;
+        }
+
+        .imdb-logo {
+            width: 20px;
+            height: 20px;
+            top: -5px;
+            right: -5px;
+            border-radius: 50%;
+            background-color: #f5c518;
+        }
+
+        .rating-low { background-color: red !important; }
+        .rating-medium { background-color: gray !important; }
+        .rating-good { background-color: yellow !important; color: black; }
+        .rating-high { background-color: green !important; }
+
+         .movie-card.flipped .card-front {
+            transform: rotateY(180deg);
+        }
+
+        .movie-card.flipped .card-back {
+            transform: rotateY(0deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            transition: transform 0.6s ease-in-out;
+        }
+
+        .card-front {
+            background-color: #1c1c1c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: rotateY(0deg);
+        }
+
+        .card-back {
+            background-color: #2a2a2a;
+            color: #ffffff;
+            text-align: center;
+            transform: rotateY(180deg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            border-radius: 15px;
+        }
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            margin: 0;
+            border-radius: 15px;
+        }
+
+        .back-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #f1c40f;
+            text-shadow: 1px 1px 5px rgba(0, 0, 0, 0.7);
+        }
+
+        .movie-description {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #dddddd;
+            max-width: 90%;
+            max-height: 150px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .movie-title-ru {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+            margin-top: 5px;
+        }
+
+        .movie-meta {
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            color: #cccccc;
+        }
+
+        .movie-genres {
+            margin-top: 5px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .genre-tag {
+            margin-top: 5px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        .movie-description {
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 5px 5px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #dddddd;
+            max-width: 90%;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: center;
+        }
+
+        .actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .action-row {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .action-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .suggestion-button,
+        .remove-button,
+        .watched-button,
+        .notwatched-button,
+        .share-button {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transform: scale(1);
+            transition: transform 0.2s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .suggestion-button img,
+        .remove-button img,
+        .watched-button img,
+        .notwatched-button img,
+        .share-button img {
+            width: 65px;
+            height: 65px;
+            object-fit: contain;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease-in-out;
+            display: block;
+        }
+
+        .suggestion-button:active img,
+        .remove-button:active img,
+        .watched-button:active img,
+        .share-button:active img,
+        .notwatched-button:active img {
+            transform: scale(1.2);
+        }
+
+        .button-label {
+            margin-top: 5px;
+            font-size: 0.6rem;
+            color: #cccccc;
+            text-align: center;
+            line-height: 1;
+        }
+
+        .flip-hint {
+            position: absolute;
+            bottom: 10px; /* Расстояние от нижней границы постера */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.2rem;
+            color: #fff;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            animation: hint-rotate 2s infinite;
+        }
+
+        .flip-hint span {
+            font-size: 1rem;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 3px 8px;
+            border-radius: 10px;
+        }
+
+
+        .flip-hint img {
+            width: 20px;
+            height: 20px;
+            animation: bounce 1.5s infinite;
+        }
+
+        @keyframes hint-rotate {
+            0%, 30% { transform: translateX(-50%) rotateY(0deg); }
+            40% { transform: translateX(-50%) rotateY(-15deg); }
+            50% { transform: translateX(-50%) rotateY(0deg); }
+            60% { transform: translateX(-50%) rotateY(15deg); }
+            70%, 100% { transform: translateX(-50%) rotateY(0deg); }
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .view-on-kinopoisk {
+            background-color: #f60;
+            color: #ffffff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .kinopoisk-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            vertical-align: middle;
+            fill: #ffffff;
+        }
+
+        .view-on-kinopoisk:hover {
+            background-color: #d45500;
+            transform: scale(1.05);
+        }
+
+        /* --- МОДАЛЬНОЕ ОКНО --- */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            padding: 20px 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.6);
+            color: white;
+            max-width: 90%;
+            width: 300px; /* или меньше, если хочешь совсем компактно */
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .modal-buttons button {
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: 0.2s;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+        }
+
+        #confirmDelete {
+            background: #e74c3c;
+            color: white;
+        }
+
+        #confirmDelete:hover {
+            background: #c0392b;
+        }
+
+        #cancelDelete {
+            background: #3498db;
+            color: white;
+        }
+
+        #cancelDelete:hover {
+            background: #2980b9;
+        }
+
+        /* --- ПОП-АП УВЕДОМЛЕНИЕ --- */
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(39, 174, 96, 0.9);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            font-size: 1rem;
+            font-weight: bold;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+            animation: fadeInOut 3s ease-in-out;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+            10% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            90% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+        }
+
+        .fade-out {
+            animation: fadeOut 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .view-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-top: 62px;
+            margin-bottom: 5px;
+            margin-left: 7px;
+        }
+
+        .tab-button {
+            padding: 9px 5px;
+            font-size: 0.7rem;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.12);
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s, box-shadow 0.3s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-button:hover {
+            transform: scale(1.05);
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .tab-button.active {
+            background: rgba(0, 136, 255, 0.9);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+            color: #fff;
+            transform: scale(1.08);
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1002;
+            padding: 10px;
+        }
+
+        .nav-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            transform: translateY(-4px);
+        }
+
+        .nav-button span {
+            font-size: 1.2rem;
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+    <div id="favorites-container">
+        <div class="view-tabs">
+            <button id="favoritesTab" class="tab-button active">Нужно глянуть</button>
+            <button id="watchedTab" class="tab-button">Просмотренные</button>
+        </div>
+        <div class="toggle-container">
+            <label class="switch">
+              <input type="checkbox" id="toggleViewSwitch" checked>
+              <span class="slider round"></span>
+            </label>
+            <span id="toggleLabel">Категории</span>
+        </div>
+        <div id="favoriteMovies"></div>
+    </div>
+
+    <button id="scrollToTop" title="Наверх">↑</button>
+    <!-- Модальное окно подтверждения -->
+
+    <div class="bottom-nav">
+        <div class="nav-button" data-href="index.html">
+            <span>🔍</span>
+            <div>Поиск</div>
+        </div>
+        <div class="nav-button" data-href="matching.html">
+            <span>🎬</span>
+            <div>Подбор</div>
+        </div>
+        <div class="nav-button" data-href="favorites.html">
+            <span>❤️</span>
+            <div>Избранное</div>
+        </div>
+        <div class="nav-button" data-href="profile.html">
+            <span>👤</span>
+            <div>Профиль</div>
+        </div>
+    </div>
+
+    <div id="deleteConfirmModal" class="modal">
+        <div class="modal-content">
+            <p>Вы действительно хотите удалить этот фильм из избранного?</p>
+            <div class="modal-buttons">
+                <button id="confirmDelete">Удалить</button>
+                <button id="cancelDelete">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Поп-ап уведомление -->
+    <div id="popupMessage" class="popup">Фильм удален из избранного</div>
+
+    <div id="loader">
+        <div class="spinner"></div>
+    </div>
+
+    <script type="module" src="./src/scripts/favorites.js"></script>
+</body>
+</html>

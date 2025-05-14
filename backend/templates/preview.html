@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta property="og:site_name" content="MovieAI" />
+    <meta property="og:title" content="{{ title }}" />
+    <meta property="og:description" content="{{ description }}" />
+    <meta property="og:image" content="{{ poster_url }}" />
+    <meta property="og:url" content="https://t.me/MovieAI777_bot/WatchMe?startapp=movie_{{ movie_id }}_ref_{{ ref_user_id }}" />
+
+    <title>Перенаправление...</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        p {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+
+        .button {
+            display: inline-block;
+            background: #ffcc00;
+            color: #000;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+
+        .button:hover {
+            background: #e6b800;
+        }
+
+        #loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid #ffcc00;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+    <h1>Открываем фильм...</h1>
+    <p>Если это не произошло автоматически, нажмите кнопку ниже.</p>
+    <div id="loader"></div>
+    <a href="https://t.me/MovieAI777_bot/WatchMe?startapp=movie_{{ movie_id }}_ref_{{ ref_user_id }}"
+       class="button" onclick="startRedirect()" target="_blank" rel="noopener noreferrer">🎬 Смотреть в Telegram</a>
+
+    <script>
+        const tg = window.Telegram?.WebApp || {
+            initData: "test",
+            MainButton: {
+                text: "Test Button",
+                show: () => console.log("Main button shown"),
+                hide: () => console.log("Main button hidden"),
+            },
+            close: () => console.log("WebApp closed"),
+        };
+
+        const link = "https://t.me/MovieAI777_bot/WatchMe?startapp=movie_{{ movie_id }}_ref_{{ ref_user_id }}";
+
+        function startRedirect() {
+            if (tg.initData !== "test") {
+                tg.close();
+                setTimeout(() => {
+                    tg.openTelegramLink(link);
+                    }, 200);
+                } else {
+                    window.location.href = link;
+                }
+        }
+        setTimeout(startRedirect, 500);
+    </script>
+</body>
+</html>

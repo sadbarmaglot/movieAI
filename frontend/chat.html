@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Чат-помощник</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .chat-box {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
+            height: 400px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .message {
+            display: inline-block;
+            padding: 10px;
+            margin: 5px 5px;
+            border-radius: 5px;
+            font-size: 16px;
+            line-height: 1.4;
+            max-width: 70%;
+            min-width: 120px;
+            word-wrap: break-word;
+            }
+
+        .message.bot {
+            background: rgba(255, 255, 255, 0.2);
+            text-align: left;
+            margin-right: auto;
+        }
+
+        .message.user {
+            background: #007BFF;
+            text-align: center;
+            color: white;
+            margin-left: auto;
+        }
+
+        .input-container {
+            display: flex;
+            margin-top: 10px;
+        }
+
+        input {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .suggestions {
+            margin: 10px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-start;
+        }
+
+        .suggestion-button {
+            padding: 8px 12px;
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .suggestion-button:hover {
+            background-color: #003d80;
+        }
+
+        .hint-text {
+            margin-top: 5px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            color: #ccc;
+            text-align: center;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1002;
+            padding: 10px;
+        }
+
+        .nav-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            transform: translateY(-4px);
+        }
+
+        .nav-button span {
+            font-size: 1.2rem;
+        }
+
+        .modal {
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.75);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+            }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: linear-gradient(145deg, #1e2a38, #2c3e50);
+            color: #ffffff;
+            padding: 25px 20px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 90%;
+            width: 300px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.4rem;
+            color: #f5c518;
+        }
+
+        .modal-content p {
+            margin-bottom: 20px;
+            font-size: 1rem;
+            color: #dddddd;
+        }
+
+        .modal-content button {
+            margin: 8px;
+            padding: 10px 20px;
+            border-radius: 12px;
+            border: none;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        #modal-buy-stars {
+            background-color: #f5c518;
+            color: #000;
+        }
+
+        #modal-buy-stars:hover {
+            background-color: #e0b500;
+            transform: scale(1.05);
+        }
+
+        #modal-cancel {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #modal-cancel:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            transform: scale(1.05);
+        }
+
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+    <div class="container">
+        <h2>Я помогу выбрать фильм</h2>
+        <div class="hint-text">Можешь выбрать одну из подсказок или ввести свой ответ.</div>
+        <div class="chat-box" id="chat-box">
+            <!-- Сообщения и подсказки будут добавляться сюда -->
+        </div>
+        <div class="input-container">
+            <input type="text" id="user-input" placeholder="Введите свой ответ...">
+            <button id="send-button">Отправить</button>
+        </div>
+    </div>
+    <div class="bottom-nav">
+        <div class="nav-button" onclick="location.href='index.html'">
+            <span>🔍</span>
+            <div>Поиск</div>
+        </div>
+        <div class="nav-button" onclick="location.href='matching.html'">
+            <span>🎬</span>
+            <div>Подбор</div>
+        </div>
+        <div class="nav-button" onclick="location.href='favorites.html'">
+            <span>❤️</span>
+            <div>Избранное</div>
+        </div>
+        <div class="nav-button" onclick="location.href='profile.html'">
+            <span>👤</span>
+            <div>Профиль</div>
+        </div>
+    </div>
+    <div id="no-stars-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Звёзды закончились</h2>
+            <p>Чтобы продолжить подбор фильмов, пополни баланс ⭐</p>
+            <button id="modal-buy-stars">Купить звёзды</button>
+            <button id="modal-cancel">Позже</button>
+        </div>
+    </div>
+    <div id="loader">
+        <div class="spinner"></div>
+    </div>
+    <script type="module" src="./src/scripts/chat.js"></script>
+</body>
+</html>

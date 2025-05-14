@@ -1,0 +1,10 @@
+ fastapi
+ uvicorn[standard]
+ aiohttp
+ httpx
+ sqlalchemy>=2.0
+ asyncpg
+ jinja2
+ pydantic>=2.0
+ openai
+ google-cloud-storage

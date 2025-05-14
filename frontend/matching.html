@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Поиск фильма</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .movie-container {
+            perspective: 1000px;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            max-width: 350px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: background 0.7s ease-in-out;
+        }
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            margin: 0;
+            border-radius: 15px;
+        }
+
+        .movie-title-ru {
+            overflow: hidden;
+            font-weight: bold;
+            margin-bottom: 5px;
+            margin-top: 5px;
+            white-space: normal;
+            text-align: center;
+            line-height: 1.2;
+            max-height: 1.2em;
+        }
+
+        .movie-meta {
+            font-size: 1rem;
+            margin-bottom: 5px;
+            color: #cccccc;
+        }
+
+        .movie-card {
+            border-radius: 15px;
+            position: relative;
+            width: 300px;
+            height: 430px;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            will-change: transform, opacity;
+            touch-action: pan-y;
+            perspective: 1000px;
+            overflow: hidden;
+            contain: layout paint;
+        }
+
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 15px;
+            position: relative;
+            transform: rotateY(0deg);
+            transform-style: preserve-3d;
+            transition: transform 0.6s ease-in-out;
+        }
+
+        .movie-card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .movie-card.swiping {
+            transition: none;
+        }
+
+        .movie-card.fly-left {
+            transform: translateX(-150%) rotate(-15deg);
+            opacity: 0;
+        }
+
+        .movie-card.fly-right {
+            transform: translateX(150%) rotate(15deg);
+            opacity: 0;
+        }
+
+        .rating-container {
+            display: flex;
+            gap: 10px;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+
+        .rating-badge {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: bold;
+            color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .rating-badge.kp {
+            top: 0;
+            right: 0;
+            background-color: gray;
+        }
+
+        .rating-badge.imdb {
+            top: 50px;
+            right: 0;
+            background-color: gray;
+        }
+
+        .rating-badge.kp img {
+            position: absolute;
+            width: 23px;
+            height: 23px;
+            top: 0;
+            left: -8px;
+        }
+
+        .rating-badge.imdb img {
+            position: absolute;
+            width: 23px;
+            height: 23px;
+            top: 0;
+            right: 35px;
+        }
+
+        .kinopoisk-logo {
+            width: 20px;
+            height: 20px;
+            top: -5px;
+            left: -5px;
+            border-radius: 50%;
+        }
+
+        .imdb-logo {
+            width: 20px;
+            height: 20px;
+            top: -5px;
+            right: -5px;
+            border-radius: 50%;
+            background-color: #f5c518;
+        }
+
+        .rating-low { background-color: red !important; }
+        .rating-medium { background-color: gray !important; }
+        .rating-good { background-color: yellow !important; color: black; }
+        .rating-high { background-color: green !important; }
+
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .card-front {
+            background-color: #1c1c1c;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: rotateY(0deg);
+        }
+
+        .card-back {
+            background-color: #2a2a2a;
+            color: #ffffff;
+            text-align: center;
+            transform: rotateY(180deg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            border-radius: 15px;
+            pointer-events: auto;
+        }
+
+        .movie-card:not(.flipped) .card-back {
+            pointer-events: none;
+        }
+        .movie-card:not(.flipped) .card-back * {
+            pointer-events: auto;
+        }
+
+        .movie-genres {
+            margin-top: 5px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .genre-tag {
+            margin-top: 5px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        .movie-description {
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 5px 5px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #dddddd;
+            max-width: 90%;
+            max-height: 250px;
+            overflow-y: auto;
+            text-align: center;
+        }
+
+        .actions {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .action-row {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+        }
+
+        .action-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .button-label {
+            margin-top: 5px;
+            font-size: 0.7rem;
+            color: #cccccc;
+            text-align: center;
+            line-height: 1;
+        }
+
+        .skip-button,
+        .favorite-button,
+        .share-button {
+            margin: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            transform: scale(1);
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .skip-button img,
+        .favorite-button img,
+        .share-button img {
+            width: 63px;
+            height: 63px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transform: scale(1);
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .skip-button:active img,
+        .favorite-button:active img,
+        .share-button:active img {
+            transform: scale(1.2);
+        }
+
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .flip-hint {
+            position: absolute;
+            bottom: 10px; /* Расстояние от нижней границы постера */
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.2rem;
+            color: #fff;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            animation: hint-rotate 2s infinite;
+        }
+
+        .flip-hint span {
+            font-size: 1rem;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 3px 8px;
+            border-radius: 10px;
+        }
+
+
+        .flip-hint img {
+            width: 20px;
+            height: 20px;
+            animation: bounce 1.5s infinite;
+        }
+
+        @keyframes hint-rotate {
+            0%, 30% { transform: translateX(-50%) rotateY(0deg); }
+            40% { transform: translateX(-50%) rotateY(-15deg); }
+            50% { transform: translateX(-50%) rotateY(0deg); }
+            60% { transform: translateX(-50%) rotateY(15deg); }
+            70%, 100% { transform: translateX(-50%) rotateY(0deg); }
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .view-on-kinopoisk {
+            background-color: #f60;
+            color: #ffffff;
+            border: none;
+            margin-bottom: 5px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .kinopoisk-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            vertical-align: middle;
+            fill: #ffffff;
+        }
+
+        .view-on-kinopoisk:hover {
+            background-color: #d45500;
+            transform: scale(1.05);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse {
+            animation: pulse 0.4s ease;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1002;
+            padding: 10px;
+        }
+
+        .nav-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            transform: translateY(-4px);
+        }
+
+        .nav-button span {
+            font-size: 1.2rem;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            background: linear-gradient(145deg, #1e2a38, #2c3e50);
+            color: #ffffff;
+            padding: 25px 20px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 90%;
+            width: 300px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.4rem;
+            color: #f5c518;
+        }
+
+        .modal-content p {
+            margin-bottom: 20px;
+            font-size: 1rem;
+            color: #dddddd;
+        }
+
+        .modal-content button {
+            margin: 8px;
+            padding: 10px 20px;
+            border-radius: 12px;
+            border: none;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        #modal-buy-stars {
+            background-color: #f5c518;
+            color: #000;
+        }
+
+        #modal-buy-stars:hover {
+            background-color: #e0b500;
+            transform: scale(1.05);
+        }
+
+        #modal-cancel {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #modal-cancel:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            transform: scale(1.05);
+        }
+
+        @keyframes fadeInScale {
+            0% {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .animate-in {
+            animation: fadeInScale 0.5s ease-out;
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+    <div class="movie-container" id="movie-container" style="display: none;">
+        <div class="movie-title-ru" id="movie-title-ru"></div>
+        <div class="movie-meta" id="movie-meta"></div>
+        <div class="actions">
+            <div class="action-row">
+                <button class="action-button skip-button" id="skip-button">
+                    <img src="./assets/icons/skip_button.webp" alt="Пропустить">
+                    <span class="button-label">Пропустить</span>
+                </button>
+                <button class="action-button favorite-button" id="favorite-button">
+                    <img src="./assets/icons/favorite_button.webp" alt="Добавить в избранное">
+                    <span class="button-label">Избранное</span>
+                </button>
+            </div>
+            <div class="action-row">
+                <button class="action-button share-button" id="share-button">
+                    <img src="./assets/icons/share_button.webp" alt="Поделиться">
+                    <span class="button-label">Поделиться</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="bottom-nav">
+        <div class="nav-button" data-href="index.html">
+            <span>🔍</span>
+            <div>Поиск</div>
+        </div>
+        <div class="nav-button" data-href="matching.html">
+            <span>🎬</span>
+            <div>Подбор</div>
+        </div>
+        <div class="nav-button" data-href="favorites.html">
+            <span>❤️</span>
+            <div>Избранное</div>
+        </div>
+        <div class="nav-button" data-href="profile.html">
+            <span>👤</span>
+            <div>Профиль</div>
+        </div>
+    </div>
+    <div id="loader">
+    <div class="spinner"></div>
+    </div>
+    <div id="no-stars-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Звёзды закончились</h2>
+            <p>Чтобы продолжить подбор фильмов, пополни баланс ⭐</p>
+            <button id="modal-buy-stars">Купить звёзды</button>
+            <button id="modal-cancel">Позже</button>
+        </div>
+    </div>
+    <script type="module" src="./src/scripts/matching.js"></script>
+</body>
+</html>

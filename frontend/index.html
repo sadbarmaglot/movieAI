@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Главная страница</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header img {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            margin-bottom: 10px;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin: 5px 0;
+        }
+
+        .header p {
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+            gap: 15px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .card span {
+            display: block;
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1002;
+            padding: 10px;
+        }
+
+        .nav-button {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #ffffff;
+            font-size: 0.6rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            transform: translateY(-4px);
+        }
+
+        .nav-button span {
+            font-size: 1.2rem;
+        }
+
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>Привет, киноман!</h1>
+        <p>Как ты хочешь выбрать фильм?</p>
+    </div>
+    <div class="cards-container">
+        <div class="card" data-href="category.html">
+            <span>📂</span> Категории
+        </div>
+        <div class="card" data-href="chat.html">
+            <span>💬</span> В чате
+        </div>
+        <div class="card" data-href="search.html">
+            <span>🔍</span> Название
+        </div>
+    </div>
+    <div class="bottom-nav">
+        <div class="nav-button" data-href="index.html">
+            <span>🔍</span>
+            <div>Поиск</div>
+        </div>
+        <div class="nav-button" data-href="matching.html">
+            <span>🎬</span>
+            <div>Подбор</div>
+        </div>
+        <div class="nav-button" data-href="favorites.html">
+            <span>❤️</span>
+            <div>Избранное</div>
+        </div>
+        <div class="nav-button" data-href="profile.html">
+            <span>👤</span>
+            <div>Профиль</div>
+        </div>
+    </div>
+</body>
+<script type="module" src="./src/scripts/index.js"></script>
+</html>
