@@ -27,7 +27,7 @@ EXCLUDED_DBSESSION_PATHS = {
 ALLOW_ORIGINS = [
     "https://autogenz.com",
     "https://storage.googleapis.com",
-    "http://localhost:63342",
+    "http://localhost:5173",
 ]
 
 # bot_app
