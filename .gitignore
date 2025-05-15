@@ -12,6 +12,8 @@ env/
 ENV/
 env.bak/
 venv.bak/
+.env.local
+.env.*.local
 
 # PyCharm / VSCode settings
 .idea/
@@ -132,3 +134,12 @@ celerybeat.pid
 .pdm.toml
 .pdm-python
 .pdm-build/
+
+# js
+node_modules/
+
+# tmp
+*.tmp
+
+# Vite / npm / Yarn
+.vite/
