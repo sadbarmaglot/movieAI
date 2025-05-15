@@ -22,9 +22,8 @@ TELEGRAM_BOT_SECRET = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256
 application = Application.builder().token(BOT_TOKEN).build()
 
 def get_user_lang(update: Update) -> str:
-    # lang = update.effective_user.language_code
-    # return "ru" if lang and lang.startswith("ru") else "en"
-    return "en"
+    lang = update.effective_user.language_code
+    return "ru" if lang and lang.startswith("ru") else "en"
 
 def check_telegram_signature(init_data):
     parsed_data = parse_qs(init_data)
