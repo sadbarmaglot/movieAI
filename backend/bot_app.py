@@ -6,11 +6,25 @@ from telegram.ext import Application, PreCheckoutQueryHandler, CommandHandler, C
 
 from db.base import AsyncSessionFactory
 from db import UserManager
-from settings import BOT_TOKEN, WEB_APP_URL, ADMIN_ID
+from settings import (
+    BOT_TOKEN,
+    WEB_APP_URL,
+    ADMIN_ID,
+    BUTTON_TEXT,
+    WELCOME_MESSAGE,
+    HELP_MESSAGE,
+    FEEDBACK_MASSAGE,
+    PAYMENT_MESSAGE,
+)
 
 TELEGRAM_BOT_SECRET = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
 
 application = Application.builder().token(BOT_TOKEN).build()
+
+def get_user_lang(update: Update) -> str:
+    # lang = update.effective_user.language_code
+    # return "ru" if lang and lang.startswith("ru") else "en"
+    return "en"
 
 def check_telegram_signature(init_data):
     parsed_data = parse_qs(init_data)
@@ -25,34 +39,27 @@ def check_telegram_signature(init_data):
 
 
 async def start(update: Update, context: CallbackContext) -> None:
+    lang = get_user_lang(update)
+
     keyboard = [
         [
             InlineKeyboardButton(
-                "Открыть мини-приложение", web_app={"url": WEB_APP_URL}
+                BUTTON_TEXT[lang], web_app={"url": WEB_APP_URL} # type: ignore
             )
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "🎬 *Добро пожаловать в MovieAI!*\n\n"
-        "Подберите фильм по описанию, настроению или жанру — с помощью приложения.\n\n"
-        "Отправьте /help, чтобы узнать обо всех возможностях.\n\n"
-        "Нажмите кнопку ниже, чтобы начать.\n\n",
+        WELCOME_MESSAGE[lang],
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
 
 async def help_command(update: Update, context: CallbackContext) -> None:
+    lang = get_user_lang(update)
     await update.message.reply_text(
-        "❓ *Что умеет MovieAI*\n\n"
-        "Вы можете выбрать удобный способ поиска фильмов:\n"
-        "•  По жанру, атмосфере, году и другим фильтрам\n"
-        "•  По вашему описанию — в интерактивном чате\n"
-        "•  По понравившемуся фильму — найдёт похожие\n\n"
-        "❤️ В подборе — добавляйте фильмы в избранное, чтобы не потерять лучшие находки.\n\n"
-        "У вас есть идея, вопрос или предложение? \nПросто напишите в сообщении боту — он всё читает!\n\n"
-        "Нажмите /start, чтобы открыть мини-приложение\n\n",
+        HELP_MESSAGE[lang],
         parse_mode="Markdown"
     )
 
@@ -64,11 +71,12 @@ async def message_handler(update: Update, context: CallbackContext) -> None:
     bot = context.bot
     msg = update.message
     user_id = msg.chat.id
+    lang = get_user_lang(update)
 
     if msg and msg.text:
         feedback_text = f"🗣 Сообщение от пользователя @{msg.from_user.username} ({user_id}):\n\n{msg.text}"
         await bot.send_message(chat_id=ADMIN_ID, text=feedback_text)
-        await msg.reply_text("Спасибо за обратную связь! Мы всё учтём 🙌")
+        await msg.reply_text(FEEDBACK_MASSAGE[lang])
 
     #charge_id = msg.text
     #await bot.refund_star_payment(user_id=user_id, telegram_payment_charge_id=charge_id)
@@ -79,6 +87,7 @@ async def successful_payment_handler(
 )  -> None:
     payment = update.message.successful_payment
     user_id = update.message.chat.id
+    lang = get_user_lang(update)
 
     provider_payment_charge_id = payment.provider_payment_charge_id
     telegram_payment_charge_id = payment.telegram_payment_charge_id
@@ -100,7 +109,7 @@ async def successful_payment_handler(
 
     await context.bot.send_message(
         chat_id=user_id,
-        text=f"🎉 Платёж прошёл успешно! Тебе начислено {total_amount} звезд ⭐️"
+        text=PAYMENT_MESSAGE[lang](total_amount)
     )
 
 def main():
