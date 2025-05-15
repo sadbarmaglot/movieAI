@@ -433,6 +433,11 @@
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             z-index: 1002;
             padding: 10px;
+            visibility: hidden;
+        }
+
+        .bottom-nav.ready {
+          visibility: visible;
         }
 
         .nav-button {
@@ -561,24 +566,26 @@
             </div>
         </div>
     </div>
+
     <div class="bottom-nav">
-        <div class="nav-button" data-href="index.html">
+          <div class="nav-button" data-href="index.html" data-key="nav_search">
             <span>🔍</span>
-            <div>Поиск</div>
+            <div></div>
         </div>
-        <div class="nav-button" data-href="matching.html">
+        <div class="nav-button" data-href="matching.html" data-key="nav_matching">
             <span>🎬</span>
-            <div>Подбор</div>
+            <div></div>
         </div>
-        <div class="nav-button" data-href="favorites.html">
+        <div class="nav-button" data-href="favorites.html" data-key="nav_favorites">
             <span>❤️</span>
-            <div>Избранное</div>
+            <div></div>
         </div>
-        <div class="nav-button" data-href="profile.html">
+        <div class="nav-button" data-href="profile.html" data-key="nav_profile">
             <span>👤</span>
-            <div>Профиль</div>
+            <div></div>
         </div>
     </div>
+
     <div id="loader">
     <div class="spinner"></div>
     </div>

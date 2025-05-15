@@ -7,6 +7,7 @@ import {
     updateMovieGenres,
     updateKinopoiskLink
 } from "./matching_modules/movie_card.js"
+import { initBottomNav } from "../common/i18n.js";
 
 const movieID = parseInt(sessionStorage.getItem('movieID'));
 let movieData;
@@ -92,16 +93,6 @@ document.getElementById('share-button').addEventListener('click', async () => {
     await shareButton(movieID);
 });
 
-document.querySelectorAll(".nav-button").forEach((btn) => {
-    const href = btn.dataset.href;
-    btn.addEventListener("click", async () => {
-        vibrateOnClick();
-        const action = href.replace(".html", "") + "_tab";
-        void logEvent(userId, action, initData, null);
-        window.location.href = href;
-    });
-});
-
 document.getElementById('suggestion-button').addEventListener('click', async () => {
     vibrateOnClick();
     void logEvent(userId, "suggest_similar", initData);
@@ -144,6 +135,7 @@ async function initializeMoviePage() {
 document.addEventListener('DOMContentLoaded', async () => {
 
     backButton("index.html");
+    initBottomNav();
     void logEvent(userId, "open", initData);
 
     await initializeMoviePage();

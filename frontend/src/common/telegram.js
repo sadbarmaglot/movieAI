@@ -17,6 +17,9 @@ export const tg = window.Telegram?.WebApp || {
 export const tgBackButton = window.Telegram?.WebApp?.BackButton;
 export const initData = window.Telegram?.WebApp?.initData || "test";
 
+const langCode = window.Telegram?.WebApp?.initDataUnsafe?.user?.language_code || 'en';
+export const userLang = langCode.startsWith('ru') ? 'ru' : 'en';
+
 export let userId = 2
 if (tg.initData && tg.initData !== "test") {
     userId = tg.initDataUnsafe?.user?.id

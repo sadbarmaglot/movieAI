@@ -1,26 +1,12 @@
-import {initData, tgBackButton, vibrateOnClick, backButton, userId} from "../common/telegram.js";
-import {logEvent} from "../common/api.js";
+import {initData, tgBackButton, backButton, userId} from "../common/telegram.js";
+import { logEvent } from "../common/api.js";
+import { initBottomNav } from "../common/i18n.js";
 
 document.addEventListener('touchstart', (event) => {
     const customInput = document.getElementById('movie-input');
     if (event.target !== customInput && !customInput.contains(event.target)) {
         customInput.blur();
     }
-});
-
-document.querySelectorAll(".nav-button").forEach((btn) => {
-    const href = btn.getAttribute("onclick")?.match(/'(.+?)'/)?.[1];
-    btn.removeAttribute("onclick");
-    btn.addEventListener("click", () => {
-        vibrateOnClick();
-        if (href) {
-            window.location.href = href;
-            setTimeout(() => {
-                tgBackButton.hide();
-                }, 50
-            );
-        }
-    });
 });
 
 document.getElementById('movie-submit').addEventListener('click', async () => {
@@ -48,5 +34,6 @@ document.getElementById('movie-submit').addEventListener('click', async () => {
 
 document.addEventListener('DOMContentLoaded', async () => {
     backButton("index.html");
+    initBottomNav();
     void logEvent(userId, "open", initData);
 });

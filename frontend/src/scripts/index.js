@@ -1,5 +1,14 @@
 import { apiPost, logEvent } from "../common/api.js";
-import {tg, initData, userId, tgBackButton, vibrateOnClick, fetchUserBalance} from "../common/telegram.js";
+import {
+    tg,
+    initData,
+    userId,
+    tgBackButton,
+    vibrateOnClick,
+    fetchUserBalance
+} from "../common/telegram.js";
+
+import { initBottomNav } from "../common/i18n.js";
 
 if (initData && initData !== "test") {
     tg.ready();
@@ -54,20 +63,12 @@ function attachEventListeners() {
             window.location.href = href;
         });
     });
-
-    document.querySelectorAll(".nav-button").forEach((btn) => {
-        const href = btn.dataset.href;
-        btn.addEventListener("click", async () => {
-            vibrateOnClick();
-            const action = href.replace(".html", "") + "_tab";
-            await logEvent(userId, action, initData, null);
-            window.location.href = href;
-        });
-    });
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
     tgBackButton.hide();
+    initBottomNav();
+    document.querySelector(".bottom-nav")?.classList.add("ready");
     await logEvent(userId, "open", initData, startParam);
     attachEventListeners();
     await handleStartParam();

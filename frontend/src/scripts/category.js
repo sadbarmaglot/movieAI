@@ -1,4 +1,5 @@
 import { logEvent } from "../common/api.js"
+import { initBottomNav } from "../common/i18n.js";
 import {
     tg,
     userId,
@@ -144,17 +145,9 @@ slider.noUiSlider.on("update", function (values) {
     document.getElementById("second").textContent = values[1];
 });
 
-document.querySelectorAll(".nav-button").forEach((btn) => {
-    const href = btn.getAttribute("onclick")?.match(/'(.+?)'/)?.[1];
-    btn.removeAttribute("onclick");
-    btn.addEventListener("click", () => {
-        vibrateOnClick();
-        if (href) { window.location.href = href; }
-    });
-});
-
 document.addEventListener('DOMContentLoaded', async () => {
     backButton("index.html");
+    initBottomNav();
     void logEvent(userId, "open", initData);
 
     const defaultCategory = document.querySelector('.category[data-category="любой"]');

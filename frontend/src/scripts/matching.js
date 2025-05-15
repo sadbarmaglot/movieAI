@@ -32,6 +32,7 @@ import {
     clearCurentSession,
     isStoredDataDifferent
 } from "./matching_modules/session.js"
+import { initBottomNav } from "../common/i18n.js";
 import { attachCardEvents } from "./matching_modules/swiper.js"
 
 const storedData = [
@@ -438,16 +439,6 @@ document.getElementById('share-button').addEventListener('click', async () => {
     await shareButton(movieID);
 });
 
-document.querySelectorAll(".nav-button").forEach((btn) => {
-    const href = btn.dataset.href;
-    btn.addEventListener("click", async () => {
-        vibrateOnClick();
-        const action = href.replace(".html", "") + "_tab";
-        void logEvent(userId, action, initData, null);
-        window.location.href = href;
-    });
-});
-
 window.addEventListener('beforeunload', () => {
     saveMovieSession({
         currentMovie,
@@ -638,6 +629,7 @@ function showNoStarsModal() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     backButton("index.html");
+    initBottomNav();
     void logEvent(userId, "open", initData);
     await initializeMatching();
 });

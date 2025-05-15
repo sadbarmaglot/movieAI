@@ -1,4 +1,5 @@
 import {apiPost, fetchFavorites, logEvent} from "../common/api.js";
+import { initBottomNav } from "../common/i18n.js";
 import {
     userId,
     initData,
@@ -586,19 +587,10 @@ function showPopup() {
     }, 3000);
 }
 
-document.querySelectorAll(".nav-button").forEach((btn) => {
-    const href = btn.dataset.href;
-    btn.addEventListener("click", async () => {
-        vibrateOnClick();
-        const action = href.replace(".html", "") + "_tab";
-        void logEvent(userId, action, initData, null);
-        window.location.href = href;
-    });
-});
-
 document.addEventListener('DOMContentLoaded', async () => {
 
     backButton("index.html");
+    initBottomNav();
     void logEvent(userId, "open", initData);
 
     const toggleSwitch = document.getElementById("toggleViewSwitch");

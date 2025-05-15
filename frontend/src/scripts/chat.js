@@ -1,5 +1,6 @@
 import {apiPost, apiPostStream, logEvent} from "../common/api.js";
 import {userId, initData, vibrateOnClick, backButton, handleDonate} from "../common/telegram.js";
+import { initBottomNav } from "../common/i18n.js";
 
 const chatBox = document.getElementById('chat-box');
 const userInput = document.getElementById('user-input');
@@ -275,19 +276,11 @@ document.addEventListener('touchstart', (event) => {
     }
 });
 
-document.querySelectorAll(".nav-button").forEach((btn) => {
-    const href = btn.getAttribute("onclick")?.match(/'(.+?)'/)?.[1];
-    btn.removeAttribute("onclick");
-    btn.addEventListener("click", () => {
-        vibrateOnClick();
-        if (href) { window.location.href = href; }
-    });
-});
-
 sendButton.addEventListener('click', handleInputEvent);
 userInput.addEventListener('keypress', handleInputEvent);
 
 document.addEventListener("DOMContentLoaded", async () => {
     backButton("index.html");
+    initBottomNav();
     void logEvent(userId, "open", initData);
 });
