@@ -16,14 +16,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+            ssh-private-key: ${{ secrets.SSH_KEY }}
+
       - name: Deploy to GCP VM
         run: |
-            echo "${{ secrets.SSH_KEY }}" > key.pem
-            chmod 600 key.pem
-        
-            ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
               cd ${{ secrets.DEPLOY_PATH }}
               git pull origin main
             EOF
-          
-            rm key.pem
