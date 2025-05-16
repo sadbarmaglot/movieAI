@@ -5,7 +5,7 @@ from starlette.requests import Request
 from starlette.types import ASGIApp
 
 from bot_app import check_telegram_signature
-from db.base import AsyncSessionFactory
+from db_managers import AsyncSessionFactory
 from settings import (
     API_KEY_NAME,
     API_KEY,

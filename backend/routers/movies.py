@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from clients import kp_client, openai_client
-from db import MovieManager
+from db_managers import MovieManager
 from models import (
     MovieResponse,
     MovieStreamingRequest,

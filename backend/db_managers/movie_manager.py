@@ -2,7 +2,7 @@ from typing import List, Dict
 from fastapi import HTTPException
 from sqlalchemy import select, insert
 
-from db.base import BaseManager, movies
+from db_managers.base import BaseManager, movies
 from models import MovieResponse, MovieDetails
 
 class MovieManager(BaseManager):

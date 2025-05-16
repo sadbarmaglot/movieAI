@@ -5,7 +5,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import AsyncMock
 
-from db.user_manager import UserManager
+from db_managers import UserManager
 from main import app
 
 @pytest.fixture

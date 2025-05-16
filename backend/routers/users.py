@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from clients import bq_client
-from db import UserManager
+from db_managers import UserManager
 from routers.dependencies import get_user_manager
 from models import (
     UserInitRequest,

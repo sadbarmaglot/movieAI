@@ -3,7 +3,7 @@ import aiohttp
 from sqlalchemy import select, update, insert
 from fastapi import status, HTTPException
 
-from db.base import BaseManager, users, referrals, payments
+from db_managers.base import BaseManager, users, referrals, payments
 from models import UserInitResponse
 from settings import BOT_TOKEN
 

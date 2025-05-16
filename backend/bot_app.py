@@ -4,8 +4,7 @@ from urllib.parse import parse_qs, unquote
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, PreCheckoutQueryHandler, CommandHandler, CallbackContext, MessageHandler, filters
 
-from db.base import AsyncSessionFactory
-from db import UserManager
+from db_managers import AsyncSessionFactory, UserManager
 from settings import (
     BOT_TOKEN,
     WEB_APP_URL,
@@ -67,10 +66,11 @@ async def pre_checkout_handler(update: Update, context: CallbackContext):
     await query.answer(ok=True)
 
 async def message_handler(update: Update, context: CallbackContext) -> None:
+    lang = get_user_lang(update)
+
     bot = context.bot
     msg = update.message
     user_id = msg.chat.id
-    lang = get_user_lang(update)
 
     if msg and msg.text:
         feedback_text = f"🗣 Сообщение от пользователя @{msg.from_user.username} ({user_id}):\n\n{msg.text}"
@@ -84,10 +84,10 @@ async def successful_payment_handler(
         update: Update,
         context: CallbackContext
 )  -> None:
-    payment = update.message.successful_payment
-    user_id = update.message.chat.id
     lang = get_user_lang(update)
 
+    payment = update.message.successful_payment
+    user_id = update.message.chat.id
     provider_payment_charge_id = payment.provider_payment_charge_id
     telegram_payment_charge_id = payment.telegram_payment_charge_id
     total_amount = payment.total_amount

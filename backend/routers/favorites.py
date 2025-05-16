@@ -2,7 +2,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends
 
-from db import FavoriteManager
+from db_managers import FavoriteManager
 from models import (
     GetFavoriteResponse,
     AddFavoriteRequest,

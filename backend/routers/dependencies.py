@@ -1,7 +1,7 @@
 from fastapi import Request, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db import FavoriteManager, MovieManager, UserManager
+from db_managers import FavoriteManager, MovieManager, UserManager
 
 def get_session(request: Request) -> AsyncSession:
     return request.state.session

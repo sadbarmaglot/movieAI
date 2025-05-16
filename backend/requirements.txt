@@ -1,10 +1,14 @@
- fastapi
- uvicorn[standard]
- aiohttp
- httpx
- sqlalchemy>=2.0
- asyncpg
- jinja2
- pydantic>=2.0
- openai
- google-cloud-storage
+fastapi
+uvicorn[standard]
+aiohttp
+httpx
+sqlalchemy>=2.0
+asyncpg
+jinja2
+pydantic>=2.0
+openai
+google-cloud-storage
+python-telegram-bot
+scikit-learn
+pillow
+google-cloud-bigquery

@@ -2,13 +2,18 @@ import re
 import json
 import random
 
-from openai import OpenAI
-from typing import List, Optional, Dict
+from typing import List, Optional
 from fastapi.responses import StreamingResponse
+from openai import OpenAI
+from openai.types.chat import (
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionUserMessageParam,
+)
+from openai.types.chat.completion_create_params import ResponseFormat
 
-from db.base import AsyncSessionFactory
-from db.movie_manager import MovieManager
-from db.user_manager import UserManager
+from db_managers import AsyncSessionFactory, MovieManager, UserManager
 from clients.kp_client import KinopoiskClient
 from models import ChatQA
 from settings import (
@@ -47,23 +52,23 @@ class OpenAIClient:
         self.prompt_num_movies = prompt_num_movies
 
     @staticmethod
-    def _generate_question_prompt():
-        system_prompt = {
-            "role": "system",
-            "content": (
+    def _generate_question_prompt() -> List[ChatCompletionMessageParam]:
+        system_prompt = ChatCompletionSystemMessageParam(
+            role="system",
+            content=(
                 "Ты — кинокритик и ассистент, помогаешь человеку понять, какие фильмы ему подойдут. "
                 "Сгенерируй 5 вопросов, которые помогут уточнить его вкус. Обращайся на ты. Ответ в JSON без лишнего текста."
             )
-        }
+        )
 
-        user_prompt = {
-            "role": "user",
-            "content": (
+        user_prompt = ChatCompletionUserMessageParam(
+            role="user",
+            content=(
                 'Сгенерируй ровно 5 вопросов, чтобы понять мои киновкусы. '
                 'Ответь строго в формате JSON, без лишнего текста: '
                 '[{"question": "Текст вопроса", "suggestions": ["Вариант 1", "Вариант 2"]}, ...]'
             )
-        }
+        )
 
         return [system_prompt, user_prompt]
 
@@ -79,66 +84,75 @@ class OpenAIClient:
             exclude: Optional[List[str]] = None,
             favorites: Optional[List[str]] = None,
             number_movies: int = PROMPT_NUM_MOVIES
-    ) -> List[Dict[str, str]]:
+    ) -> List[ChatCompletionMessageParam]:
 
-        system_prompt = {
-            "role": "system",
-            "content": (
+        system_prompt = ChatCompletionSystemMessageParam(
+            role="system",
+            content=(
                 "Ты — кинокритик и ассистент. Помоги мне найти интересные фильмы на основе моих предпочтений. "
                 "Не предлагай запрещённые или неуместные фильмы. "
                 "Отвечай строго в формате JSON без лишнего текста."
             )
-        }
+        )
 
         if not chat_answers:
-            prompt_parts = [f"Посоветуй {number_movies} уже вышедших фильмов"]
+            user_prompt_parts = [f"Посоветуй {number_movies} уже вышедших фильмов"]
 
             if genres:
-                prompt_parts.append(f"в жанрах {', '.join(genres)}")
+                user_prompt_parts.append(f"в жанрах {', '.join(genres)}")
             if atmospheres:
-                prompt_parts.append(f"с атмосферой {', '.join(atmospheres)}")
+                user_prompt_parts.append(f"с атмосферой {', '.join(atmospheres)}")
             if start_year and end_year:
-                prompt_parts.append(f"выпущенных между {start_year} и {end_year}")
+                user_prompt_parts.append(f"выпущенных между {start_year} и {end_year}")
             if description:
-                prompt_parts.append(f"удовлетворяющие описанию: {description}")
+                user_prompt_parts.append(f"удовлетворяющие описанию: {description}")
             if suggestion:
-                prompt_parts.append(f"похожие на фильм: {suggestion} (не предлагай его)")
+                user_prompt_parts.append(f"похожие на фильм: {suggestion} (не предлагай его)")
 
-            prompt_parts.append(random.choice(self.prompt_styles))
+            user_prompt_parts.append(random.choice(self.prompt_styles))
 
             if favorites:
-                prompt_parts.append(f"⚠️ Не включай фильмы из избранного: {', '.join(favorites)}")
+                user_prompt_parts.append(f"⚠️ Не включай фильмы из избранного: {', '.join(favorites)}")
             if exclude:
-                prompt_parts.append(f"⚠️ Строго исключи: {', '.join(exclude)}")
+                user_prompt_parts.append(f"⚠️ Строго исключи: {', '.join(exclude)}")
 
-            user_prompt = {
-                "role": "user",
-                "content": (
-                        ", ".join(prompt_parts) +
+            user_prompt = ChatCompletionUserMessageParam(
+                role="user",
+                content=(
+                        ", ".join(user_prompt_parts) +
                         '. Ответь в формате JSON: '
                         '{"movies": [{"title_alt": "Только название фильма на языке оригинала без указания года выпуска"}]}'
                 )
-            }
+            )
 
             return [system_prompt, user_prompt]
 
-        assistant_prompt = {"role": "assistant", "content": ""}
-        user_prompt = {"role": "user", "content": ""}
+        assistant_lines = [f"question_{idx}: {chat.question}" for idx, chat in enumerate(chat_answers, start=1)]
+        user_lines = [f"answer_{idx}: {chat.answer}" for idx, chat in enumerate(chat_answers, start=1)]
 
-        for idx, chat in enumerate(chat_answers, start=1):
-            assistant_prompt["content"] += f"question_{idx}: {chat.question}, "
-            user_prompt["content"] += f"answer_{idx}: {chat.answer}, "
+        assistant_prompt_content = ", ".join(assistant_lines) + ", "
+        user_prompt_content = ", ".join(user_lines) + ", "
 
-        user_prompt["content"] += random.choice(self.prompt_styles)
+        user_prompt_content += random.choice(self.prompt_styles)
 
         if favorites:
-            user_prompt["content"] += f"⚠️ Не включай избранные: {', '.join(favorites)}. "
+            user_prompt_content += f"⚠️ Не включай избранные: {', '.join(favorites)}. "
         if exclude:
-            user_prompt["content"] += f"⚠️ Строго исключи: {', '.join(exclude)}. "
+            user_prompt_content += f"⚠️ Строго исключи: {', '.join(exclude)}. "
 
-        user_prompt["content"] += (
+        user_prompt_content += (
             f"Посоветуй {number_movies} уже вышедших фильмов. Ответь в формате JSON: "
             '{"movies": [{"title_alt": "Только название фильма на языке оригинала без указания года выпуска"}]}'
+        )
+
+        assistant_prompt = ChatCompletionAssistantMessageParam(
+            role="assistant",
+            content=assistant_prompt_content
+        )
+
+        user_prompt = ChatCompletionUserMessageParam(
+            role="user",
+            content=user_prompt_content
         )
 
         return [system_prompt, assistant_prompt, user_prompt]
@@ -157,14 +171,14 @@ class OpenAIClient:
                     temperature=self.temperature_qa,
                     messages=messages,
                     stream=True,
-                    response_format={"type": "json_object"},
+                    response_format=ResponseFormat.JSON_OBJECT,
                 )
 
                 for chunk in response:
                     if chunk.choices and chunk.choices[0].delta.content:
                         buffer += chunk.choices[0].delta.content
                         buffer = re.sub(QUESTION_PREFIX_PATTERN, "", buffer).strip()
-                        matches = re.findall(r'\{.*?\}', buffer, re.DOTALL)
+                        matches = re.findall(r'{.*?}', buffer, re.DOTALL)
                         for match in matches:
                             try:
                                 json_obj = json.loads(match)
@@ -232,7 +246,7 @@ class OpenAIClient:
                         temperature=self.temperature_movies,
                         messages=messages,
                         stream=True,
-                        response_format={"type": "json_object"},
+                        response_format=ResponseFormat.JSON_OBJECT,
                     )
 
                     for chunk in response:
@@ -240,7 +254,7 @@ class OpenAIClient:
                             if chunk.choices and chunk.choices[0].delta.content:
                                 buffer += chunk.choices[0].delta.content
                                 buffer = re.sub(MOVIES_PREFIX_PATTERN, "", buffer).strip()
-                                matches = re.findall(r'\{.*?\}', buffer, re.DOTALL)
+                                matches = re.findall(r'{.*?}', buffer, re.DOTALL)
 
                                 for match in matches:
                                     try:

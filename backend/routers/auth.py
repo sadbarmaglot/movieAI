@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db import UserManager
+from db_managers import UserManager
 
 
 class PermissionDenied(Exception):

@@ -3,7 +3,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from unittest.mock import AsyncMock, MagicMock
 
-from db.user_manager import UserManager
+from db_managers import UserManager
 
 
 @pytest_asyncio.fixture

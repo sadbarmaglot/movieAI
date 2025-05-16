@@ -1,7 +1,7 @@
 from typing import List
 from sqlalchemy import select, insert, delete, update
 
-from db.base import BaseManager, favorite_movies, movies
+from db_managers.base import BaseManager, favorite_movies, movies
 from models import GetFavoriteResponse
 
 class FavoriteManager(BaseManager):
