@@ -19,11 +19,21 @@ jobs:
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.7.0
         with:
-            ssh-private-key: ${{ secrets.SSH_KEY }}
+          ssh-private-key: ${{ secrets.SSH_KEY }}
 
       - name: Deploy to GCP VM
         run: |
-            ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
-              cd ${{ secrets.DEPLOY_PATH }}
-              git pull origin main
-            EOF
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+            set -e  # остановить скрипт при первой же ошибке
+
+            cd ${{ secrets.DEPLOY_PATH }}
+            git pull origin main
+
+            echo "🔄 Restarting app.service..."
+            sudo systemctl restart app
+
+            echo "🔄 Restarting bot.service..."
+            sudo systemctl restart bot
+
+            echo "✅ Deployment complete."
+          EOF
