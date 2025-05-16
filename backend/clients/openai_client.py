@@ -2,7 +2,7 @@ import re
 import json
 import random
 
-from typing import List, Optional
+from typing import List, Optional, cast
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from openai.types.chat import (
@@ -11,8 +11,6 @@ from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionUserMessageParam,
 )
-from openai.types.chat.completion_create_params import ResponseFormat
-
 from db_managers import AsyncSessionFactory, MovieManager, UserManager
 from clients.kp_client import KinopoiskClient
 from models import ChatQA
@@ -171,7 +169,7 @@ class OpenAIClient:
                     temperature=self.temperature_qa,
                     messages=messages,
                     stream=True,
-                    response_format=ResponseFormat.JSON_OBJECT,
+                    response_format={"type": "json_object"},
                 )
 
                 for chunk in response:
@@ -246,7 +244,7 @@ class OpenAIClient:
                         temperature=self.temperature_movies,
                         messages=messages,
                         stream=True,
-                        response_format=ResponseFormat.JSON_OBJECT,
+                        response_format={"type": "json_object"}
                     )
 
                     for chunk in response:
