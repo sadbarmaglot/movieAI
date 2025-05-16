@@ -1,7 +1,5 @@
 import os
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.environ["GCS_CREDENTIALS_PATH"]
-
 # middlewares
 API_KEY_NAME = "X-API-Key"
 INIT_DATA_HEADER_NAME = "X-Telegram-Init-Data"
