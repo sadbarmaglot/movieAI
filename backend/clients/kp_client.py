@@ -1,4 +1,5 @@
 import json
+import logging
 import aiohttp
 import asyncio
 
@@ -6,6 +7,10 @@ from typing import List, Optional
 
 from clients.gc_client import GoogleCloudClient
 from models import MovieDetails
+
+
+logger = logging.getLogger(__name__)
+
 
 class KinopoiskClient:
     BASE_URL = "https://api.kinopoisk.dev/v1.4"
@@ -60,7 +65,7 @@ class KinopoiskClient:
                 try:
                     result = json.loads(await response.text())
                 except Exception as e:
-                    print(f"Ошибка при парсинге JSON: {e}")
+                    logger.exception("Ошибка при парсинге JSON: %s", e)
                     return None
 
         if not result.get("docs"):
@@ -86,7 +91,7 @@ class KinopoiskClient:
                 try:
                     result = await response.json()
                 except Exception as e:
-                    print(f"Ошибка при парсинге JSON: {e}")
+                    logger.exception("Ошибка при парсинге JSON: %s", e)
                     return []
         movies = []
         poster_tasks = []

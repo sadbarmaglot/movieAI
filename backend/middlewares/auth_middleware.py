@@ -1,18 +1,19 @@
+import logging
+
 from fastapi import status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.types import ASGIApp
 
 from bot_app import check_telegram_signature
-from db_managers import AsyncSessionFactory
 from settings import (
     API_KEY_NAME,
     API_KEY,
     INIT_DATA_HEADER_NAME,
     EXCLUDED_AUTH_PATHS,
-    EXCLUDED_DBSESSION_PATHS
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -36,22 +37,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if (init_data and check_telegram_signature(init_data)) or (api_key and api_key == self.api_key):
             return await call_next(request)
+        else:
+            logger.warning("Unauthorized request: %s", request.url)
 
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"detail": "Unauthorized request"}
         )
-
-
-class DBSessionMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp):
-        super().__init__(app)
-
-    async def dispatch(self, request: Request, call_next):
-        if any(request.url.path.startswith(path) for path in EXCLUDED_DBSESSION_PATHS):
-            return await call_next(request)
-
-        async with AsyncSessionFactory() as session:
-            request.state.session = session
-            response = await call_next(request)
-            return response

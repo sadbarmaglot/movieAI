@@ -1,9 +1,13 @@
 import json
+import logging
 
 from google.cloud import bigquery
 from datetime import datetime
 
 from settings import TABLE_ID
+
+
+logger = logging.getLogger(__name__)
 
 
 class BigQueryClient:
@@ -34,8 +38,8 @@ class BigQueryClient:
 
         errors = self.client.insert_rows_json(TABLE_ID, [row])
         if errors:
-            print("❌ Ошибка при вставке в BigQuery:", errors)
+            logger.error("❌ Ошибка при вставке в BigQuery: %s", errors)
             return {"status": "error"}
         else:
-            print("✅ Лог записан в BigQuery")
+            logger.info("✅ Лог записан в BigQuery")
             return {"status": "ok"}

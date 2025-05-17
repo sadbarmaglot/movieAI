@@ -1,5 +1,6 @@
 import aiohttp
 import asyncio
+import logging
 import numpy as np
 
 from io import BytesIO
@@ -8,6 +9,9 @@ from typing import Optional, Tuple
 from sklearn.cluster import KMeans
 from google.cloud import storage
 from settings import BUCKET_NAME
+
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleCloudClient:
@@ -57,7 +61,7 @@ class GoogleCloudClient:
                     blob.upload_from_string(content, content_type="image/jpeg")
                     return file_path, background_color
                 else:
-                    print(f"Ошибка загрузки {poster_url}: {response.status}")
+                    logger.error("Ошибка загрузки %s: %s — %s", poster_url, response.status, response_text)
                     return None, None
 
     @staticmethod

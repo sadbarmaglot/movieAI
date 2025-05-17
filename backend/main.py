@@ -1,10 +1,23 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from middlewares import AuthMiddleware, DBSessionMiddleware
+from middlewares import (
+    AuthMiddleware,
+    DBSessionMiddleware,
+    LoggingMiddleware,
+)
 from openapi_config import custom_openapi
 from routers import health, favorites, movies, users
 from settings import ALLOW_ORIGINS
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 def create_app() -> FastAPI:
     fastapi_app = FastAPI()
@@ -15,7 +28,9 @@ def create_app() -> FastAPI:
 
     return fastapi_app
 
+
 def _configure_middleware(fastapi_app: FastAPI) -> None:
+    fastapi_app.add_middleware(LoggingMiddleware) # type: ignore
     fastapi_app.add_middleware(AuthMiddleware) # type: ignore
     fastapi_app.add_middleware(DBSessionMiddleware) # type: ignore
     fastapi_app.add_middleware(

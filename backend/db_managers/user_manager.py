@@ -7,6 +7,7 @@ from db_managers.base import BaseManager, users, referrals, payments
 from models import UserInitResponse
 from settings import BOT_TOKEN
 
+
 class UserManager(BaseManager):
 
     async def check_user_stars_balance(
@@ -151,7 +152,6 @@ class UserManager(BaseManager):
 
     async def create_invoice(self, user_id:int,amount: int) -> dict:
         invoice_payload = self._generate_invoice_payload(user_id=user_id, amount=amount)
-        print(invoice_payload)
         async with aiohttp.ClientSession() as session:
             async with session.post(
                     f"https://api.telegram.org/bot{BOT_TOKEN}/createInvoiceLink",
@@ -159,7 +159,6 @@ class UserManager(BaseManager):
             ) as response:
                 if response.status == 200:
                     json_data = await response.json()
-                    print(json_data)
                     return {"ok": True, "invoice_url": json_data["result"]}
 
                 error_text = await response.text()

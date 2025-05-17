@@ -1,9 +1,15 @@
+import logging
+
 from typing import List, Dict
 from fastapi import HTTPException
 from sqlalchemy import select, insert
 
 from db_managers.base import BaseManager, movies
 from models import MovieResponse, MovieDetails
+
+
+logger = logging.getLogger(__name__)
+
 
 class MovieManager(BaseManager):
 
@@ -101,4 +107,4 @@ class MovieManager(BaseManager):
                         movie_data.background_color = existing.get("background_color")
                 else:
                     await self.session.execute(insert(movies).values(**movie_data.model_dump()))
-                    print(f"✅ Фильм {movie_data.title_alt} добавлен в базу")
+                    logger.info("✅ Фильм %s добавлен в БД", movie_data.title_alt)

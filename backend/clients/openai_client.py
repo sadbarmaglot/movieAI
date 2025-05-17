@@ -1,8 +1,9 @@
 import re
 import json
+import logging
 import random
 
-from typing import List, Optional, cast
+from typing import List, Optional
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from openai.types.chat import (
@@ -23,6 +24,10 @@ from settings import (
     OVERRIDE_DATA,
     QUERY_STYLES,
 )
+
+
+logger = logging.getLogger(__name__)
+
 
 def fix_movie_title(title):
     return re.sub(r'([a-zA-Z])(\d+)', r'\1 \2', title)
@@ -159,7 +164,7 @@ class OpenAIClient:
 
         messages = self._generate_question_prompt()
 
-        print(messages)
+        logger.debug("messages: %s", messages)
 
         async def stream_generator():
             buffer = ""
@@ -185,7 +190,7 @@ class OpenAIClient:
                             except json.JSONDecodeError:
                                 continue
             except Exception as e:
-                print(f"OpenAI Error in question generation: {e}")
+                logger.error("OpenAI Error in question generation: %s", e)
 
         return StreamingResponse(stream_generator(), media_type="application/json")
 
@@ -237,7 +242,7 @@ class OpenAIClient:
                         number_movies=PROMPT_NUM_MOVIES
                     )
 
-                    print(messages)
+                    logger.debug("messages: %s", messages)
 
                     response = self.client.chat.completions.create(
                         model=self.model_movies,
@@ -289,7 +294,7 @@ class OpenAIClient:
                                     yield json.dumps(json_obj) + "\n"
 
                         except Exception as e:
-                            print(f"OpenAI Error in movies generation: {e}")
+                            logger.error("OpenAI Error in movies generation: %s", e)
                             continue
 
                     if not found_movies:
