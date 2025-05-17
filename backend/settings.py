@@ -20,6 +20,7 @@ EXCLUDED_DBSESSION_PATHS = {
     "/openapi.json",
     "/redoc"
 }
+EXCLUDED_LOG_PATHS = ["/health",]
 
 # main
 ALLOW_ORIGINS = [
