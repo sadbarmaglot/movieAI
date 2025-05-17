@@ -2,6 +2,7 @@ import re
 import json
 import logging
 import random
+import traceback
 
 from typing import List, Optional
 from fastapi.responses import StreamingResponse
@@ -180,6 +181,10 @@ class OpenAIClient:
                 for chunk in response:
                     if chunk.choices and chunk.choices[0].delta.content:
                         buffer += chunk.choices[0].delta.content
+
+                        if len(buffer) > 5000:
+                            buffer = buffer[-1000:]
+
                         buffer = re.sub(QUESTION_PREFIX_PATTERN, "", buffer).strip()
                         matches = re.findall(r'{.*?}', buffer, re.DOTALL)
                         for match in matches:
@@ -190,7 +195,7 @@ class OpenAIClient:
                             except json.JSONDecodeError:
                                 continue
             except Exception as e:
-                logger.error("OpenAI Error in question generation: %s", e)
+                logger.error("OpenAI Error in question generation: %s\n%s", e, traceback.format_exc())
 
         return StreamingResponse(stream_generator(), media_type="application/json")
 
@@ -223,86 +228,93 @@ class OpenAIClient:
             found_movies = set()
 
             async with AsyncSessionFactory() as session:
-                user_manager = UserManager(session=session)
-                movie_manager = MovieManager(session=session)
+                async with session.begin():
+                    user_manager = UserManager(session=session)
+                    movie_manager = MovieManager(session=session)
 
-                await user_manager.deduct_user_stars(user_id=user_id, amount=2)
+                    await user_manager.deduct_user_stars(user_id=user_id, amount=2)
 
-                while attempt < max_attempts:
-                    messages = self._generate_movie_prompt(
-                        chat_answers=chat_answers,
-                        genres=genres,
-                        atmospheres=atmospheres,
-                        description=description,
-                        suggestion=suggestion,
-                        start_year=start_year,
-                        end_year=end_year,
-                        exclude=exclude,
-                        favorites=favorites,
-                        number_movies=PROMPT_NUM_MOVIES
-                    )
+                    logger.info("🎬 Starting movie stream for user_id=%s", user_id)
 
-                    logger.debug("messages: %s", messages)
+                    while attempt < max_attempts:
+                        messages = self._generate_movie_prompt(
+                            chat_answers=chat_answers,
+                            genres=genres,
+                            atmospheres=atmospheres,
+                            description=description,
+                            suggestion=suggestion,
+                            start_year=start_year,
+                            end_year=end_year,
+                            exclude=exclude,
+                            favorites=favorites,
+                            number_movies=PROMPT_NUM_MOVIES
+                        )
 
-                    response = self.client.chat.completions.create(
-                        model=self.model_movies,
-                        temperature=self.temperature_movies,
-                        messages=messages,
-                        stream=True,
-                        response_format={"type": "json_object"}
-                    )
+                        logger.debug("messages: %s", messages)
 
-                    for chunk in response:
-                        try:
-                            if chunk.choices and chunk.choices[0].delta.content:
-                                buffer += chunk.choices[0].delta.content
-                                buffer = re.sub(MOVIES_PREFIX_PATTERN, "", buffer).strip()
-                                matches = re.findall(r'{.*?}', buffer, re.DOTALL)
+                        response = self.client.chat.completions.create(
+                            model=self.model_movies,
+                            temperature=self.temperature_movies,
+                            messages=messages,
+                            stream=True,
+                            response_format={"type": "json_object"}
+                        )
 
-                                for match in matches:
-                                    try:
-                                        json_obj = json.loads(match)
-                                        buffer = buffer.replace(match, "")
-                                    except json.JSONDecodeError:
-                                        continue
+                        for chunk in response:
+                            try:
+                                if chunk.choices and chunk.choices[0].delta.content:
+                                    buffer += chunk.choices[0].delta.content
 
-                                    original_title = json_obj["title_alt"]
-                                    title = fix_movie_title(OVERRIDE_DATA.get(original_title, original_title))
-                                    normalized_title = title.strip().lower()
+                                    if len(buffer) > 5000:
+                                        buffer = buffer[-1000:]
 
-                                    if normalized_title in exclude_movies_set or normalized_title in favorites_movies_set:
-                                        continue
+                                    buffer = re.sub(MOVIES_PREFIX_PATTERN, "", buffer).strip()
+                                    matches = re.findall(r'{.*?}', buffer, re.DOTALL)
 
-                                    exclude_movies_set.add(normalized_title)
-                                    exclude.append(normalized_title)
-                                    found_movies.add(normalized_title)
-
-                                    selected_movie = await movie_manager.get_by_title_gpt(title_gpt=title)
-                                    if selected_movie:
-                                        json_obj.update(selected_movie)
-                                    else:
-                                        movie_details = await self.kp_client.get_by_title(title_gpt=title)
-                                        if not movie_details:
+                                    for match in matches:
+                                        try:
+                                            json_obj = json.loads(match)
+                                            buffer = buffer.replace(match, "")
+                                        except json.JSONDecodeError:
                                             continue
-                                        await movie_manager.insert_movies(movies_data=[movie_details])
-                                        json_obj.update({
-                                            **movie_details.model_dump(),
-                                            "poster_url": movie_details.google_cloud_url,
-                                            "movie_id": movie_details.kp_id
-                                        })
 
-                                    yield json.dumps(json_obj) + "\n"
+                                        original_title = json_obj["title_alt"]
+                                        title = fix_movie_title(OVERRIDE_DATA.get(original_title, original_title))
+                                        normalized_title = title.strip().lower()
 
-                        except Exception as e:
-                            logger.error("OpenAI Error in movies generation: %s", e)
-                            continue
+                                        if normalized_title in exclude_movies_set or normalized_title in favorites_movies_set:
+                                            continue
 
-                    if not found_movies:
-                        failed_attempt += 1
-                        if failed_attempt >= max_failed_attempts:
-                            break
+                                        exclude_movies_set.add(normalized_title)
+                                        exclude.append(normalized_title)
+                                        found_movies.add(normalized_title)
 
-                    found_movies.clear()
-                    attempt += 1
+                                        selected_movie = await movie_manager.get_by_title_gpt(title_gpt=title)
+                                        if selected_movie:
+                                            json_obj.update(selected_movie)
+                                        else:
+                                            movie_details = await self.kp_client.get_by_title(title_gpt=title)
+                                            if not movie_details:
+                                                continue
+                                            await movie_manager.insert_movies(movies_data=[movie_details])
+                                            json_obj.update({
+                                                **movie_details.model_dump(),
+                                                "poster_url": movie_details.google_cloud_url,
+                                                "movie_id": movie_details.kp_id
+                                            })
+
+                                        yield json.dumps(json_obj) + "\n"
+
+                            except Exception as e:
+                                logger.error("OpenAI Error in movies generation: %s\n%s", e, traceback.format_exc())
+                                continue
+
+                        if not found_movies:
+                            failed_attempt += 1
+                            if failed_attempt >= max_failed_attempts:
+                                break
+
+                        found_movies.clear()
+                        attempt += 1
 
         return StreamingResponse(stream_generator(), media_type="application/json")

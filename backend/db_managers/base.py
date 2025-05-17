@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+from functools import wraps
 from sqlalchemy import (
     Column,
     Boolean,
@@ -91,14 +91,23 @@ referrals = Table(
 )
 
 
+def transactional(function):
+    @wraps(function)
+    async def wrapper(self, *args, **kwargs):
+        if self.session.in_transaction():
+            return await function(self, *args, **kwargs)
+        async with self.session.begin():
+            return await function(self, *args, **kwargs)
+    return wrapper
+
+
+def read_only(function):
+    @wraps(function)
+    async def wrapper(self, *args, **kwargs):
+        return await function(self, *args, **kwargs)
+    return wrapper
+
+
 class BaseManager:
     def __init__(self, session: AsyncSession):
         self.session = session
-
-    @asynccontextmanager
-    async def transaction(self):
-        """
-        Контекстный менеджер для явной транзакции, если нужно.
-        """
-        async with self.session.begin():
-            yield

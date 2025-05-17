@@ -1,15 +1,25 @@
 import aiohttp
 
+from functools import wraps
 from sqlalchemy import select, update, insert
 from fastapi import status, HTTPException
 
-from db_managers.base import BaseManager, users, referrals, payments
+from db_managers.base import (
+    AsyncSessionFactory,
+    BaseManager,
+    users,
+    referrals,
+    payments,
+    read_only,
+    transactional
+)
 from models import UserInitResponse
 from settings import BOT_TOKEN
 
 
 class UserManager(BaseManager):
 
+    @read_only
     async def check_user_stars_balance(
             self,
             user_id: int,
@@ -23,18 +33,21 @@ class UserManager(BaseManager):
             raise HTTPException(status_code=404, detail="User not found")
         return balance >= min_stars
 
+    @read_only
     async def _check_user_exists(self, user_id: int) -> bool:
         result = await self.session.execute(
             select(1).where(users.c.user_id == user_id) # type: ignore
         )
         return result.scalar_one_or_none() is not None
 
+    @read_only
     async def _check_referral_exists(self, user_id: int) -> bool:
         result = await self.session.execute(
             select(1).where(referrals.c.referred_user_id == user_id) # type: ignore
         )
         return result.scalar_one_or_none() is not None
 
+    @transactional
     async def _save_referral(self, referred_user_id: int, referrer_user_id: int) -> None:
         await self.session.execute(
             insert(referrals).values(
@@ -43,21 +56,22 @@ class UserManager(BaseManager):
             )
         )
 
+    @transactional
     async def ensure_user_exists(self, user_id: int) -> UserInitResponse:
-        async with self.transaction():
-            result = await self.session.execute(
-                select(users.c.balance).where(users.c.user_id == user_id) # type: ignore
-            )
-            user_row = result.first()
-            if user_row:
-                return UserInitResponse(user_id=user_id, balance=user_row.balance)
+        result = await self.session.execute(
+            select(users.c.balance).where(users.c.user_id == user_id) # type: ignore
+        )
+        user_row = result.first()
+        if user_row:
+            return UserInitResponse(user_id=user_id, balance=user_row.balance)
 
-            balance = 10
-            await self.session.execute(
-                insert(users).values(user_id=user_id, balance=balance)
-            )
-            return UserInitResponse(user_id=user_id, balance=balance)
+        balance = 10
+        await self.session.execute(
+            insert(users).values(user_id=user_id, balance=balance)
+        )
+        return UserInitResponse(user_id=user_id, balance=balance)
 
+    @transactional
     async def update_balance(self, user_id: int, delta: int):
         await self.session.execute(
             update(users)
@@ -65,27 +79,28 @@ class UserManager(BaseManager):
             .values(balance=users.c.balance + delta)
         )
 
+    @transactional
     async def deduct_user_stars(self, user_id: int, amount: int) -> None:
-        async with self.transaction():
-            await self.update_balance(user_id, -amount)
-            result = await self.session.execute(
-                select(referrals).where(
-                    referrals.c.referred_user_id == user_id, # type: ignore
-                    referrals.c.reward_given == False # type: ignore
-                )
+        await self.update_balance(user_id, -amount)
+        result = await self.session.execute(
+            select(referrals).where(
+                referrals.c.referred_user_id == user_id, # type: ignore
+                referrals.c.reward_given == False # type: ignore
+            )
+        )
+
+        referral = result.fetchone()
+
+        if referral:
+            referrer_user_id = referral.referrer_user_id
+            await self.update_balance(referrer_user_id, 10)
+            await self.session.execute(
+                update(referrals)
+                .where(referrals.c.referred_user_id == user_id) # type: ignore
+                .values(reward_given=True)
             )
 
-            referral = result.fetchone()
-
-            if referral:
-                referrer_user_id = referral.referrer_user_id
-                await self.update_balance(referrer_user_id, 10)
-                await self.session.execute(
-                    update(referrals)
-                    .where(referrals.c.referred_user_id == user_id) # type: ignore
-                    .values(reward_given=True)
-                )
-
+    @transactional
     async def save_payment(
             self, user_id: int,
             provider_payment_charge_id: str,
@@ -112,6 +127,7 @@ class UserManager(BaseManager):
             )
             return True
 
+    @transactional
     async def handle_referral(
             self, referrer_user_id: int,
             referred_user_id: int
@@ -122,19 +138,18 @@ class UserManager(BaseManager):
                 detail="Self-referral is not allowed."
             )
 
-        async with self.transaction():
-            already_registered = await self._check_user_exists(user_id=referred_user_id)
-            if already_registered:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="User already registered."
-                )
+        already_registered = await self._check_user_exists(user_id=referred_user_id)
+        if already_registered:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User already registered."
+            )
 
-            referral_exists = await self._check_referral_exists(user_id=referred_user_id)
-            if referral_exists:
-                return {"status": "ok", "message": "Referral already saved."}
+        referral_exists = await self._check_referral_exists(user_id=referred_user_id)
+        if referral_exists:
+            return {"status": "ok", "message": "Referral already saved."}
 
-            await self._save_referral(referred_user_id=referred_user_id, referrer_user_id=referrer_user_id)
+        await self._save_referral(referred_user_id=referred_user_id, referrer_user_id=referrer_user_id)
 
         return {"status": "ok"}
 
@@ -163,3 +178,13 @@ class UserManager(BaseManager):
 
                 error_text = await response.text()
                 return {"ok": False, "error": f"Telegram API error ({response.status}): {error_text}"}
+
+
+def with_user_manager(func):
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        async with AsyncSessionFactory() as session:
+            async with session.begin():
+                user_manager = UserManager(session=session)
+                return await func(self, user_manager=user_manager, *args, **kwargs)
+    return wrapper

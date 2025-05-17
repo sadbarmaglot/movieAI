@@ -1,11 +1,18 @@
 from typing import List
 from sqlalchemy import select, insert, delete, update
 
-from db_managers.base import BaseManager, favorite_movies, movies
+from db_managers.base import (
+    BaseManager,
+    favorite_movies,
+    movies,
+    read_only,
+    transactional
+    )
 from models import GetFavoriteResponse
 
 class FavoriteManager(BaseManager):
 
+    @read_only
     async def get_favorites(self, user_id: int) -> List[GetFavoriteResponse]:
         favorites_subquery = (
             select(
@@ -59,36 +66,36 @@ class FavoriteManager(BaseManager):
             ) for row in rows
         ]
 
+    @transactional
     async def add_favorite(self, user_id: int, kp_id: int) -> None:
-        async with self.transaction():
-            result = await self.session.execute(
-                select(favorite_movies).where(
-                    (favorite_movies.c.user_id == user_id) & # type: ignore
-                    (favorite_movies.c.kp_id == kp_id) # type: ignore
-                )
+        result = await self.session.execute(
+            select(favorite_movies).where(
+                (favorite_movies.c.user_id == user_id) & # type: ignore
+                (favorite_movies.c.kp_id == kp_id) # type: ignore
             )
-            exists = result.scalar_one_or_none()
-            if not exists:
-                await self.session.execute(
-                    insert(favorite_movies).values(user_id=user_id, kp_id=kp_id)
-                )
+        )
+        exists = result.scalar_one_or_none()
+        if not exists:
+            await self.session.execute(
+                insert(favorite_movies).values(user_id=user_id, kp_id=kp_id)
+            )
 
+    @transactional
     async def remove_favorite(self, user_id: int, kp_id: int) -> None:
-        async with self.transaction():
-            await self.session.execute(
-                delete(favorite_movies).where(
-                    (favorite_movies.c.user_id == user_id) & # type: ignore
-                    (favorite_movies.c.kp_id == kp_id) # type: ignore
-                )
+        await self.session.execute(
+            delete(favorite_movies).where(
+                (favorite_movies.c.user_id == user_id) & # type: ignore
+                (favorite_movies.c.kp_id == kp_id) # type: ignore
             )
+        )
 
+    @transactional
     async def mark_watched(self, user_id: int, kp_id: int, is_watched: bool) -> None:
-        async with self.transaction():
-            await self.session.execute(
-                update(favorite_movies)
-                .where(
-                    (favorite_movies.c.user_id == user_id) & # type: ignore
-                    (favorite_movies.c.kp_id == kp_id) # type: ignore
-                )
-                .values(iswatched=is_watched)
+        await self.session.execute(
+            update(favorite_movies)
+            .where(
+                (favorite_movies.c.user_id == user_id) & # type: ignore
+                (favorite_movies.c.kp_id == kp_id) # type: ignore
             )
+            .values(iswatched=is_watched)
+        )

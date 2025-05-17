@@ -4,7 +4,12 @@ from typing import List, Dict
 from fastapi import HTTPException
 from sqlalchemy import select, insert
 
-from db_managers.base import BaseManager, movies
+from db_managers.base import (
+    BaseManager,
+    movies,
+    read_only,
+    transactional
+)
 from models import MovieResponse, MovieDetails
 
 
@@ -13,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class MovieManager(BaseManager):
 
+    @read_only
     async def get_by_kp_id(self, kp_id: int) -> MovieResponse:
         query = (
             select(
@@ -53,6 +59,7 @@ class MovieManager(BaseManager):
             background_color=row.background_color,
         )
 
+    @read_only
     async def get_by_title_gpt(self, title_gpt: str) -> Dict:
         query = select(
             movies.c.kp_id,
@@ -90,21 +97,21 @@ class MovieManager(BaseManager):
 
         return {}
 
+    @transactional
     async def insert_movies(self, movies_data: List[MovieDetails]) -> None:
         """
         Асинхронно вставляет новые строки в таблицу movies.
 
         :param movies_data: список объектов MovieDetails с данными фильмов
         """
-        async with self.transaction():
-            for movie_data in movies_data:
-                query = select(movies.c.background_color).where(movies.c.kp_id == movie_data.kp_id) # type: ignore
-                result = await self.session.execute(query)
-                existing = result.mappings().first()
+        for movie_data in movies_data:
+            query = select(movies.c.background_color).where(movies.c.kp_id == movie_data.kp_id) # type: ignore
+            result = await self.session.execute(query)
+            existing = result.mappings().first()
 
-                if existing:
-                    if movie_data.background_color is None:
-                        movie_data.background_color = existing.get("background_color")
-                else:
-                    await self.session.execute(insert(movies).values(**movie_data.model_dump()))
-                    logger.info("✅ Фильм %s добавлен в БД", movie_data.title_alt)
+            if existing:
+                if movie_data.background_color is None:
+                    movie_data.background_color = existing.get("background_color")
+            else:
+                await self.session.execute(insert(movies).values(**movie_data.model_dump()))
+                logger.info("✅ Фильм %s добавлен в БД", movie_data.title_alt)
