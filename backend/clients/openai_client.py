@@ -165,7 +165,7 @@ class OpenAIClient:
 
         messages = self._generate_question_prompt()
 
-        logger.debug("messages: %s", messages)
+        logger.info("messages: %s", messages)
 
         async def stream_generator():
             buffer = ""
@@ -229,11 +229,13 @@ class OpenAIClient:
 
             async with AsyncSessionFactory() as session:
                 async with session.begin():
-                    user_manager = UserManager(session=session)
-                    movie_manager = MovieManager(session=session)
-
+                    user_manager = UserManager(session)
                     await user_manager.deduct_user_stars(user_id=user_id, amount=2)
+                    logger.info("✅ Stars deducted successfully for user_id=%s", user_id)
 
+            async with AsyncSessionFactory() as session:
+                async with session.begin():
+                    movie_manager = MovieManager(session=session)
                     logger.info("🎬 Starting movie stream for user_id=%s", user_id)
 
                     while attempt < max_attempts:
@@ -250,7 +252,7 @@ class OpenAIClient:
                             number_movies=PROMPT_NUM_MOVIES
                         )
 
-                        logger.debug("messages: %s", messages)
+                        logger.info("messages: %s", messages)
 
                         response = self.client.chat.completions.create(
                             model=self.model_movies,
