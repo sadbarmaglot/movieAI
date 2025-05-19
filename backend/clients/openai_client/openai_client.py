@@ -10,7 +10,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from db_managers import AsyncSessionFactory, MovieManager, UserManager
 from clients.kp_client import KinopoiskClient
 from models import ChatQA
-from prompt_templates import (
+from clients.openai_client import (
     SYSTEM_PROMPT_QUESTIONS,
     SYSTEM_PROMPT_MOVIES,
     USER_PROMPT_QUESTIONS,
