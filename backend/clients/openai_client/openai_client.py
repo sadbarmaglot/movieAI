@@ -1,29 +1,31 @@
 import re
 import json
 import logging
-import random
 import traceback
 
 from typing import List, Optional
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
-from openai.types.chat import (
-    ChatCompletionMessageParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionUserMessageParam,
-)
+from openai.types.chat import ChatCompletionMessageParam
 from db_managers import AsyncSessionFactory, MovieManager, UserManager
 from clients.kp_client import KinopoiskClient
 from models import ChatQA
+from prompt_templates import (
+    SYSTEM_PROMPT_QUESTIONS,
+    SYSTEM_PROMPT_MOVIES,
+    USER_PROMPT_QUESTIONS,
+    build_user_prompt,
+    build_user_prompt_chat,
+    build_assistant_prompt
+)
 from settings import (
-    PROMPT_NUM_MOVIES,
+    MODEL_MOVIES,
+    MODEL_QA,
     TEMPERATURE_MOVIES,
     TEMPERATURE_QA,
     QUESTION_PREFIX_PATTERN,
     MOVIES_PREFIX_PATTERN,
     OVERRIDE_DATA,
-    QUERY_STYLES,
 )
 
 
@@ -39,12 +41,10 @@ class OpenAIClient:
             self,
             kp_client: KinopoiskClient,
             client: OpenAI =OpenAI(),
-            model_qa: str = "gpt-4o",
-            model_movies: str = "gpt-4o-mini",
+            model_qa: str = MODEL_QA,
+            model_movies: str = MODEL_MOVIES,
             temperature_qa: float = TEMPERATURE_QA,
             temperature_movies: float = TEMPERATURE_MOVIES,
-            prompt_styles: list = None,
-            prompt_num_movies: int = PROMPT_NUM_MOVIES
     ):
         self.client = client
         self.kp_client = kp_client
@@ -52,32 +52,13 @@ class OpenAIClient:
         self.model_movies = model_movies
         self.temperature_qa = temperature_qa
         self.temperature_movies = temperature_movies
-        self.prompt_styles = prompt_styles if prompt_styles is not None else QUERY_STYLES
-        self.prompt_num_movies = prompt_num_movies
 
     @staticmethod
     def _generate_question_prompt() -> List[ChatCompletionMessageParam]:
-        system_prompt = ChatCompletionSystemMessageParam(
-            role="system",
-            content=(
-                "Ты — кинокритик и ассистент, помогаешь человеку понять, какие фильмы ему подойдут. "
-                "Сгенерируй 5 вопросов, которые помогут уточнить его вкус. Обращайся на ты. Ответ в JSON без лишнего текста."
-            )
-        )
+        return [SYSTEM_PROMPT_QUESTIONS, USER_PROMPT_QUESTIONS]
 
-        user_prompt = ChatCompletionUserMessageParam(
-            role="user",
-            content=(
-                'Сгенерируй ровно 5 вопросов, чтобы понять мои киновкусы. '
-                'Ответь строго в формате JSON, без лишнего текста: '
-                '[{"question": "Текст вопроса", "suggestions": ["Вариант 1", "Вариант 2"]}, ...]'
-            )
-        )
-
-        return [system_prompt, user_prompt]
-
+    @staticmethod
     def _generate_movie_prompt(
-            self,
             chat_answers: Optional[List[ChatQA]] = None,
             genres: Optional[List[str]] = None,
             atmospheres: Optional[List[str]] = None,
@@ -87,79 +68,34 @@ class OpenAIClient:
             suggestion: Optional[str] = "",
             exclude: Optional[List[str]] = None,
             favorites: Optional[List[str]] = None,
-            number_movies: int = PROMPT_NUM_MOVIES
     ) -> List[ChatCompletionMessageParam]:
 
-        system_prompt = ChatCompletionSystemMessageParam(
-            role="system",
-            content=(
-                "Ты — кинокритик и ассистент. Помоги мне найти интересные фильмы на основе моих предпочтений. "
-                "Не предлагай запрещённые или неуместные фильмы. "
-                "Отвечай строго в формате JSON без лишнего текста."
-            )
-        )
-
-        if not chat_answers:
-            user_prompt_parts = [f"Посоветуй {number_movies} уже вышедших фильмов"]
-
-            if genres:
-                user_prompt_parts.append(f"в жанрах {', '.join(genres)}")
-            if atmospheres:
-                user_prompt_parts.append(f"с атмосферой {', '.join(atmospheres)}")
-            if start_year and end_year:
-                user_prompt_parts.append(f"выпущенных между {start_year} и {end_year}")
-            if description:
-                user_prompt_parts.append(f"удовлетворяющие описанию: {description}")
-            if suggestion:
-                user_prompt_parts.append(f"похожие на фильм: {suggestion} (не предлагай его)")
-
-            user_prompt_parts.append(random.choice(self.prompt_styles))
-
-            if favorites:
-                user_prompt_parts.append(f"⚠️ Не включай фильмы из избранного: {', '.join(favorites)}")
-            if exclude:
-                user_prompt_parts.append(f"⚠️ Строго исключи: {', '.join(exclude)}")
-
-            user_prompt = ChatCompletionUserMessageParam(
-                role="user",
-                content=(
-                        ", ".join(user_prompt_parts) +
-                        '. Ответь в формате JSON: '
-                        '{"movies": [{"title_alt": "Только название фильма на языке оригинала без указания года выпуска"}]}'
+        if chat_answers:
+            return [
+                SYSTEM_PROMPT_MOVIES,
+                build_assistant_prompt(
+                    chat_answers=chat_answers
+                ),
+                build_user_prompt_chat(
+                    chat_answers=chat_answers,
+                    exclude=exclude,
+                    favorites=favorites,
                 )
+            ]
+
+        return [
+            SYSTEM_PROMPT_MOVIES,
+            build_user_prompt(
+                genres=genres,
+                atmospheres=atmospheres,
+                start_year=start_year,
+                end_year=end_year,
+                description=description,
+                suggestion=suggestion,
+                exclude=exclude,
+                favorites=favorites,
             )
-
-            return [system_prompt, user_prompt]
-
-        assistant_lines = [f"question_{idx}: {chat.question}" for idx, chat in enumerate(chat_answers, start=1)]
-        user_lines = [f"answer_{idx}: {chat.answer}" for idx, chat in enumerate(chat_answers, start=1)]
-
-        assistant_prompt_content = ", ".join(assistant_lines) + ", "
-        user_prompt_content = ", ".join(user_lines) + ", "
-
-        user_prompt_content += random.choice(self.prompt_styles)
-
-        if favorites:
-            user_prompt_content += f"⚠️ Не включай избранные: {', '.join(favorites)}. "
-        if exclude:
-            user_prompt_content += f"⚠️ Строго исключи: {', '.join(exclude)}. "
-
-        user_prompt_content += (
-            f"Посоветуй {number_movies} уже вышедших фильмов. Ответь в формате JSON: "
-            '{"movies": [{"title_alt": "Только название фильма на языке оригинала без указания года выпуска"}]}'
-        )
-
-        assistant_prompt = ChatCompletionAssistantMessageParam(
-            role="assistant",
-            content=assistant_prompt_content
-        )
-
-        user_prompt = ChatCompletionUserMessageParam(
-            role="user",
-            content=user_prompt_content
-        )
-
-        return [system_prompt, assistant_prompt, user_prompt]
+        ]
 
     async def stream_questions(self) -> StreamingResponse:
 
@@ -249,7 +185,6 @@ class OpenAIClient:
                             end_year=end_year,
                             exclude=exclude,
                             favorites=favorites,
-                            number_movies=PROMPT_NUM_MOVIES
                         )
 
                         logger.info("messages: %s", messages)

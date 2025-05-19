@@ -61,7 +61,7 @@ class GoogleCloudClient:
                     blob.upload_from_string(content, content_type="image/jpeg")
                     return file_path, background_color
                 else:
-                    logger.error("Ошибка загрузки %s: %s — %s", poster_url, response.status, response_text)
+                    logger.error("Ошибка загрузки %s: %s — %s", poster_url, response.status)
                     return None, None
 
     @staticmethod
