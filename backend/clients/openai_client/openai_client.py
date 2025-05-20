@@ -11,9 +11,9 @@ from db_managers import AsyncSessionFactory, MovieManager, UserManager
 from clients.kp_client import KinopoiskClient
 from models import ChatQA
 from clients.openai_client.prompt_templates import (
-    SYSTEM_PROMPT_QUESTIONS,
-    SYSTEM_PROMPT_MOVIES,
-    USER_PROMPT_QUESTIONS,
+    SYSTEM_PROMPT_QUESTIONS_RU,
+    SYSTEM_PROMPT_MOVIES_EN,
+    USER_PROMPT_QUESTIONS_RU,
     build_user_prompt,
     build_user_prompt_chat,
     build_assistant_prompt
@@ -55,7 +55,7 @@ class OpenAIClient:
 
     @staticmethod
     def _generate_question_prompt() -> List[ChatCompletionMessageParam]:
-        return [SYSTEM_PROMPT_QUESTIONS, USER_PROMPT_QUESTIONS]
+        return [SYSTEM_PROMPT_QUESTIONS_RU, USER_PROMPT_QUESTIONS_RU]
 
     @staticmethod
     def _generate_movie_prompt(
@@ -72,7 +72,7 @@ class OpenAIClient:
 
         if chat_answers:
             return [
-                SYSTEM_PROMPT_MOVIES,
+                SYSTEM_PROMPT_MOVIES_EN,
                 build_assistant_prompt(
                     chat_answers=chat_answers
                 ),
@@ -80,11 +80,12 @@ class OpenAIClient:
                     chat_answers=chat_answers,
                     exclude=exclude,
                     favorites=favorites,
+                    lang="en"
                 )
             ]
 
         return [
-            SYSTEM_PROMPT_MOVIES,
+            SYSTEM_PROMPT_MOVIES_EN,
             build_user_prompt(
                 genres=genres,
                 atmospheres=atmospheres,
@@ -94,6 +95,7 @@ class OpenAIClient:
                 suggestion=suggestion,
                 exclude=exclude,
                 favorites=favorites,
+                lang="en"
             )
         ]
 
