@@ -45,7 +45,7 @@ class MovieDetails(BaseModel):
     def from_kp_data(cls, movie_data: dict, **extras) -> "MovieDetails":
         return cls(
             kp_id=movie_data["id"],
-            tmdb_id=movie_data.get("externalId", {}).get("tmdb"),
+            tmdb_id=(movie_data.get("externalId") or {}).get("tmdb"),
             title_alt=movie_data.get("alternativeName", ""),
             title_ru=movie_data.get("name", ""),
             overview=movie_data.get("description", ""),
