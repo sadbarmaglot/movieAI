@@ -1,4 +1,5 @@
 import json
+import math
 import logging
 
 from openai import OpenAIError
@@ -10,6 +11,13 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 
 from settings import MODEL_MOVIES, TOP_K, INDEX_PATH
+
+
+def sanitize_metadata(meta: dict) -> dict:
+    return {
+        k: (v if not isinstance(v, float) or math.isfinite(v) else None)
+        for k, v in meta.items()
+    }
 
 
 def load_vectorstore() -> FAISS:
@@ -84,4 +92,10 @@ class MovieRAGRecommender:
         except (KeyError, OpenAIError, Exception) as e:
             logging.warning(f"[MovieRAG] Ошибка при получении ответа от модели: {e}")
             indices = list(range(min(self.k, len(docs))))  # fallback: top K первых
-        return [docs[i] for i in indices if i < len(docs)]
+        return [
+            {
+                **sanitize_metadata(docs[i].metadata),
+                "description": docs[i].page_content
+            }
+            for i in indices if i < len(docs)
+        ]
