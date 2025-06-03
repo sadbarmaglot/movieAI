@@ -1,5 +1,6 @@
 import logging
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,8 +9,9 @@ from middlewares import (
     DBSessionMiddleware,
     LoggingMiddleware,
 )
+from clients.openai_client.rag_pipeline import MovieRAGRecommender, load_vectorstore
 from openapi_config import custom_openapi
-from routers import health, favorites, movies, users
+from routers import health, favorites, movies, users, rag_pipeline
 from settings import ALLOW_ORIGINS
 
 logging.basicConfig(
@@ -19,8 +21,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    vectorstore = load_vectorstore()
+    app.state.recommender = MovieRAGRecommender(vectorstore)
+    logger.info("✅ MovieRAGRecommender initialized and ready.")
+    yield
+
+
 def create_app() -> FastAPI:
-    fastapi_app = FastAPI()
+    fastapi_app = FastAPI(lifespan=lifespan)
     fastapi_app.openapi = lambda: custom_openapi(fastapi_app)
 
     _configure_middleware(fastapi_app)
@@ -46,5 +56,6 @@ def _include_routers(fastapi_app: FastAPI) -> None:
     fastapi_app.include_router(favorites.router, tags=["Favorites"])
     fastapi_app.include_router(movies.router, tags=["Movies"])
     fastapi_app.include_router(users.router, tags=["User"])
+    fastapi_app.include_router(rag_pipeline.router, tags=["Test"])
 
 app = create_app()

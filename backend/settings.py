@@ -115,3 +115,7 @@ BUCKET_NAME = "autogen-images"
 # db_managers.base
 SQL_PSWRD = os.environ["SQL_PSWRD"]
 ASYNC_DATABASE_URL = f"postgresql+asyncpg://test:{SQL_PSWRD}@localhost/test"
+
+# clients.rag_pipeline
+INDEX_PATH = os.environ["INDEX_PATH"]
+TOP_K = 200

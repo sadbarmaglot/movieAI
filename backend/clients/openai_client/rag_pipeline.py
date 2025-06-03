@@ -1,0 +1,66 @@
+import json
+from langchain_core.runnables import RunnableMap
+from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langchain.vectorstores import FAISS
+
+from settings import MODEL_MOVIES, TOP_K
+
+
+class MovieRAGRecommender:
+    def __init__(self, vectorstore: FAISS, model_name=MODEL_MOVIES, k=TOP_K):
+        self.vectorstore = vectorstore
+        self.k = k
+        self.model_name = model_name
+        self.llm = ChatOpenAI(model=self.model_name)
+
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", "Ты — рекомендательная система, которая отбирает лучшие фильмы."),
+            (
+                "user",
+                "Вот список фильмов в формате JSON:\n{context_json}\n\n"
+                "Выбери 100 фильмов, которые наиболее подходят под запрос: \"{question}\".\n"
+                "Верни их индексы (ключ `index`) с помощью вызова функции select_top_movies_by_index."
+            )
+        ])
+
+        @tool
+        def select_top_movies_by_index(indices: list[int]) -> list[int]:
+            """Выбирает лучшие фильмы по индексам."""
+            return indices
+
+        self.agent = (
+            RunnableMap({
+                "context_json": lambda x: json.dumps(
+                    self._create_context_json(x["docs"]), ensure_ascii=False
+                ),
+                "question": lambda x: x["question"]
+            })
+            | self.prompt
+            | self.llm.bind_tools([select_top_movies_by_index])
+            | JsonOutputFunctionsParser()
+        )
+
+    @staticmethod
+    def _create_context_json(docs):
+        return [
+            {
+                "index": i,
+                "kp_id": d.metadata.get("kp_id"),
+                "title": d.metadata.get("title_ru"),
+                "year": d.metadata.get("year"),
+                "genres": d.metadata.get("genres"),
+                "rating_kp": d.metadata.get("rating_kp", "-"),
+                "rating_imdb": d.metadata.get("rating_imdb", "-"),
+                "description": d.page_content[:400],
+            }
+            for i, d in enumerate(docs)
+        ]
+
+    def recommend(self, question: str):
+        docs = self.vectorstore.similarity_search(question, k=self.k)
+        result = self.agent.invoke({"question": question, "docs": docs})
+        indices = result.get("indices", [])
+        return [docs[i] for i in indices if i < len(docs)]
