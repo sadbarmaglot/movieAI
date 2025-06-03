@@ -4,7 +4,7 @@ from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 
 from settings import MODEL_MOVIES, TOP_K, INDEX_PATH
 
@@ -42,15 +42,18 @@ class MovieRAGRecommender:
             return indices
 
         self.agent = (
-            RunnableMap({
-                "context_json": lambda x: json.dumps(
-                    self._create_context_json(x["docs"]), ensure_ascii=False
-                ),
-                "question": lambda x: x["question"]
-            })
-            | self.prompt
-            | self.llm.bind_tools([select_top_movies_by_index])
-            | JsonOutputFunctionsParser()
+                RunnableMap({
+                    "context_json": lambda x: json.dumps(
+                        self._create_context_json(x["docs"]), ensure_ascii=False
+                    ),
+                    "question": lambda x: x["question"]
+                })
+                | self.prompt
+                | self.llm.bind_tools(
+            [select_top_movies_by_index],
+            function_call={"name": "select_top_movies_by_index"}
+        )
+                | JsonOutputFunctionsParser()
         )
 
     @staticmethod
