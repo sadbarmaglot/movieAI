@@ -12,10 +12,4 @@ class RecommendRequest(BaseModel):
 async def recommend_movies(request: Request, data: RecommendRequest):
     recommender: MovieRAGRecommender = request.app.state.recommender
     top_movies = recommender.recommend(question=data.question)
-    return [
-        {
-            **movie.metadata,
-            "description": movie.page_content
-        }
-        for movie in top_movies
-    ]
+    return top_movies
