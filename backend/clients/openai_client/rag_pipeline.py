@@ -3,10 +3,20 @@ from langchain_core.runnables import RunnableMap
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 
-from settings import MODEL_MOVIES, TOP_K
+from settings import MODEL_MOVIES, TOP_K, INDEX_PATH
+
+
+def load_vectorstore() -> FAISS:
+    embeddings = OpenAIEmbeddings()
+    vectorstore = FAISS.load_local(
+        folder_path=INDEX_PATH,
+        embeddings=embeddings,
+        allow_dangerous_deserialization=True
+    )
+    return vectorstore
 
 
 class MovieRAGRecommender:
