@@ -1,4 +1,7 @@
 import json
+import logging
+
+from openai import OpenAIError
 from langchain_core.runnables import RunnableMap
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -24,7 +27,6 @@ class MovieRAGRecommender:
         self.vectorstore = vectorstore
         self.k = k
         self.model_name = model_name
-        self.llm = ChatOpenAI(model=self.model_name)
 
         @tool
         def select_top_movies_by_index(indices: list[int]) -> list[int]:
@@ -76,6 +78,10 @@ class MovieRAGRecommender:
 
     def recommend(self, question: str):
         docs = self.vectorstore.similarity_search(question, k=self.k)
-        result = self.agent.invoke({"question": question, "docs": docs})
-        indices = result.get("indices", [])
+        try:
+            result = self.agent.invoke({"question": question, "docs": docs})
+            indices = result.get("indices", [])
+        except (KeyError, OpenAIError, Exception) as e:
+            logging.warning(f"[MovieRAG] Ошибка при получении ответа от модели: {e}")
+            indices = list(range(min(self.k, len(docs))))  # fallback: top K первых
         return [docs[i] for i in indices if i < len(docs)]
