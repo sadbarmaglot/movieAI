@@ -26,6 +26,16 @@ class MovieRAGRecommender:
         self.model_name = model_name
         self.llm = ChatOpenAI(model=self.model_name)
 
+        @tool
+        def select_top_movies_by_index(indices: list[int]) -> list[int]:
+            """Выбирает лучшие фильмы по индексам."""
+            return indices
+
+        self.llm = ChatOpenAI(model=self.model_name).bind_tools(
+            tools=[select_top_movies_by_index],
+            function_call={"name": "select_top_movies_by_index"}
+        )
+
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", "Ты — рекомендательная система, которая отбирает лучшие фильмы."),
             (
@@ -36,24 +46,16 @@ class MovieRAGRecommender:
             )
         ])
 
-        @tool
-        def select_top_movies_by_index(indices: list[int]) -> list[int]:
-            """Выбирает лучшие фильмы по индексам."""
-            return indices
-
         self.agent = (
-                RunnableMap({
-                    "context_json": lambda x: json.dumps(
-                        self._create_context_json(x["docs"]), ensure_ascii=False
-                    ),
-                    "question": lambda x: x["question"]
-                })
-                | self.prompt
-                | self.llm.bind_tools(
-            [select_top_movies_by_index],
-            function_call={"name": "select_top_movies_by_index"}
-        )
-                | JsonOutputFunctionsParser()
+            RunnableMap({
+                "context_json": lambda x: json.dumps(
+                    self._create_context_json(x["docs"]), ensure_ascii=False
+                ),
+                "question": lambda x: x["question"]
+            })
+            | self.prompt
+            | self.llm
+            | JsonOutputFunctionsParser()
         )
 
     @staticmethod
