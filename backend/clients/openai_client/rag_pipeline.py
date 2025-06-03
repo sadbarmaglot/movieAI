@@ -85,7 +85,9 @@ class MovieRAGRecommender:
         ]
 
     def recommend(self, question: str):
-        docs = self.vectorstore.similarity_search(question, k=self.k)
+        docs = self.vectorstore.max_marginal_relevance_search(
+            question, fetch_k=500, k=self.k, lambda_mult=0.5
+        )
         try:
             result = self.agent.invoke({"question": question, "docs": docs})
             indices = result.get("indices", [])
