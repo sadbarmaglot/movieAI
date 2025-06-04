@@ -3,13 +3,14 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from openai import OpenAI
 
 from middlewares import (
     AuthMiddleware,
     DBSessionMiddleware,
     LoggingMiddleware,
 )
-from clients.openai_client.rag_pipeline import MovieRAGRecommender, load_vectorstore
+from clients.openai_client.rag_pipeline import MovieWeaviateRecommender, load_vectorstore_weaviate
 from openapi_config import custom_openapi
 from routers import health, favorites, movies, users, rag_pipeline
 from settings import ALLOW_ORIGINS
@@ -23,9 +24,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    vectorstore = load_vectorstore()
-    app.state.recommender = MovieRAGRecommender(vectorstore)
-    logger.info("✅ MovieRAGRecommender initialized and ready.")
+    weaviate_client = load_vectorstore_weaviate()
+    openai_client = OpenAI()
+    recommender = MovieWeaviateRecommender(
+        weaviate_client=weaviate_client,
+        openai_client=openai_client,
+    )
+    app.state.recommender = recommender
+    logger.info("✅ MovieRAGRecommender initialized with Weaviate.")
     yield
 
 

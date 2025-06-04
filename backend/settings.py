@@ -82,6 +82,9 @@ ALLOW_ORIGINS = [
     "https://storage.googleapis.com",
     "http://localhost:5173",
 ]
+WEAVITE_HOST = "localhost"
+WEAVITE_HTTP_PORT = 8181
+WEAVITE_GRPC_PORT = 50051
 
 # clients.bq_client
 TABLE_ID = "autogen-1-438415.movieAI_logs.page_views"
@@ -119,3 +122,5 @@ ASYNC_DATABASE_URL = f"postgresql+asyncpg://test:{SQL_PSWRD}@localhost/test"
 # clients.rag_pipeline
 INDEX_PATH = os.environ["INDEX_PATH"]
 TOP_K = 200
+MODEL_EMBS = "text-embedding-3-small"
+CLASS_NAME = "Movie"
