@@ -11,7 +11,7 @@ services:
     env_file:
       - .env
     volumes:
-      - /home/shemkostya/backend_data
+      - /home/shemkostya/backend_data:/app/keys
     networks:
       - internal
 
