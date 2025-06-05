@@ -12,6 +12,7 @@ services:
       - .env
     volumes:
       - /home/shemkostya/backend_data:/app/keys
+      - /home/shemkostya/serts:/app/certs
     networks:
       - internal
 
