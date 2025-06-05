@@ -10,6 +10,8 @@ services:
       - db
     env_file:
       - .env
+    volumes:
+      - /home/shemkostya/backend_data
     networks:
       - internal
 
