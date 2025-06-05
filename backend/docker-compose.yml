@@ -3,6 +3,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    command: >
+      gunicorn main:app
+      --workers 4
+      --preload
+      --timeout 120
+      --bind 0.0.0.0:8080
+      --worker-class uvicorn.workers.UvicornWorker
+      --keyfile /app/certs/privkey.pem
+      --certfile /app/certs/fullchain.pem
     ports:
       - "8080:8080"
     depends_on:
@@ -11,8 +20,20 @@ services:
     env_file:
       - .env
     volumes:
-      - /home/shemkostya/backend_data:/app/keys
-      - /home/shemkostya/serts:/app/certs
+      - ${PATH_BACKEND_DATA}:/app/keys
+      - ${PATH_CERTS}:/app/certs
+    networks:
+      - internal
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python3 -m telegram_bot.bot_app
+    depends_on:
+      - db
+    env_file:
+      - .env
     networks:
       - internal
 
@@ -30,7 +51,7 @@ services:
       PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
       DEFAULT_VECTORIZER_MODULE: "none"
     volumes:
-      - /home/shemkostya/weaviate_data:/var/lib/weaviate
+      - ${PATH_WEAVIATE_DATA}:/var/lib/weaviate
     env_file:
       - .env
     networks:
@@ -44,7 +65,7 @@ services:
       POSTGRES_PASSWORD: ${SQL_PSWRD}
       POSTGRES_DB: ${SQL_DB}
     volumes:
-      - /home/shemkostya/pg_data:/var/lib/postgresql/data
+      - ${PATH_PG_DATA}:/var/lib/postgresql/data
     networks:
       - internal
 
