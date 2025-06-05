@@ -82,9 +82,6 @@ ALLOW_ORIGINS = [
     "https://storage.googleapis.com",
     "http://localhost:5173",
 ]
-WEAVITE_HOST = "localhost"
-WEAVITE_HTTP_PORT = 8181
-WEAVITE_GRPC_PORT = 50051
 
 # clients.bq_client
 TABLE_ID = "autogen-1-438415.movieAI_logs.page_views"
@@ -116,11 +113,19 @@ OVERRIDE_DATA = {
 BUCKET_NAME = "autogen-images"
 
 # db_managers.base
+SQL_HOST=os.environ["SQL_HOST"]
+SQL_PORT=os.environ["SQL_PORT"]
+SQL_DB=os.environ["SQL_DB"]
+SQL_USER=os.environ["SQL_USER"]
 SQL_PSWRD = os.environ["SQL_PSWRD"]
-ASYNC_DATABASE_URL = f"postgresql+asyncpg://test:{SQL_PSWRD}@localhost/test"
+ASYNC_DATABASE_URL = f"postgresql+asyncpg://{SQL_USER}:{SQL_PSWRD}@{SQL_HOST}:{SQL_PORT}/{SQL_USER}"
 
 # clients.rag_pipeline
 INDEX_PATH = os.environ["INDEX_PATH"]
 TOP_K = 200
 MODEL_EMBS = "text-embedding-3-small"
 CLASS_NAME = "Movie"
+WEAVITE_HOST_HTTP = "weaviate"
+WEAVITE_PORT_HTTP = 8080
+WEAVITE_HOST_GRPC = "weaviate"
+WEAVITE_PORT_GRPC = 50051

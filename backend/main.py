@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     weaviate_client = load_vectorstore_weaviate()
+    weaviate_client.connect()
     openai_client = OpenAI()
     recommender = MovieWeaviateRecommender(
         weaviate_client=weaviate_client,

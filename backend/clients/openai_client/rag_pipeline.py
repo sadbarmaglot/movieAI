@@ -19,9 +19,10 @@ from settings import (
     MODEL_MOVIES,
     TOP_K,
     INDEX_PATH,
-    WEAVITE_HOST,
-    WEAVITE_HTTP_PORT,
-    WEAVITE_GRPC_PORT,
+    WEAVITE_HOST_HTTP,
+    WEAVITE_HOST_GRPC,
+    WEAVITE_PORT_HTTP,
+    WEAVITE_PORT_GRPC,
     MODEL_EMBS,
     CLASS_NAME
 )
@@ -48,15 +49,14 @@ def load_vectorstore_faiss() -> FAISS:
 def load_vectorstore_weaviate() -> WeaviateClient:
     weaviate_client = WeaviateClient(
         connection_params=ConnectionParams.from_params(
-            http_host=WEAVITE_HOST,
-            http_port=WEAVITE_HTTP_PORT,
+            http_host=WEAVITE_HOST_HTTP,
+            http_port=WEAVITE_PORT_HTTP,
             http_secure=False,
-            grpc_host=WEAVITE_HOST,
-            grpc_port=WEAVITE_GRPC_PORT,
+            grpc_host=WEAVITE_HOST_GRPC,
+            grpc_port=WEAVITE_PORT_GRPC,
             grpc_secure=False,
         )
     )
-
     return weaviate_client
 
 class MovieRAGRecommender:
