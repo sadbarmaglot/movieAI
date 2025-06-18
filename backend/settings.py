@@ -122,7 +122,7 @@ ASYNC_DATABASE_URL = f"postgresql+asyncpg://{SQL_USER}:{SQL_PSWRD}@{SQL_HOST}:{S
 
 # clients.rag_pipeline
 INDEX_PATH = os.environ["INDEX_PATH"]
-TOP_K = 100
+TOP_K = 10
 TOP_K_SEARCH = 30
 MODEL_EMBS = "text-embedding-3-small"
 CLASS_NAME = "Movie"
