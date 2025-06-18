@@ -312,27 +312,24 @@ class MovieWeaviateRecommender:
 
         async def stream_generator():
             async with AsyncSessionFactory() as session:
-                async with session.begin():
-                    movie_manager = MovieManager(session)
+                movie_manager = MovieManager(session)
 
-                    for movie in movies:
-                        kp_id = movie.get("kp_id")
-                        if not kp_id:
-                            continue
+                for movie in movies:
+                    kp_id = movie.get("kp_id")
+                    if not kp_id:
+                        continue
 
-                        yield " \n"
-
+                    try:
                         try:
+                            movie_response = await asyncio.wait_for(
+                                movie_manager.get_by_kp_id(kp_id=kp_id), timeout=5
+                            )
+                            movie = movie_response.model_dump()
+                            movie["poster_url"] = movie.get("poster_url")
+                            movie["movie_id"] = movie.get("movie_id")
+                        except (HTTPException, asyncio.TimeoutError):
+                            yield " \n"
                             try:
-                                movie_response = await asyncio.wait_for(
-                                    movie_manager.get_by_kp_id(kp_id=kp_id), timeout=5
-                                )
-                                movie = movie_response.model_dump()
-                                movie["poster_url"] = movie.get("poster_url")
-                                movie["movie_id"] = movie.get("movie_id")
-                            except (HTTPException, asyncio.TimeoutError):
-                                yield " \n"
-
                                 movie_details = await asyncio.wait_for(
                                     self.kp_client.get_by_kp_id(kp_id=kp_id), timeout=5
                                 )
@@ -342,10 +339,13 @@ class MovieWeaviateRecommender:
                                 movie = movie_details.model_dump()
                                 movie["poster_url"] = movie_details.google_cloud_url
                                 movie["movie_id"] = movie_details.kp_id
+                            except asyncio.TimeoutError:
+                                logger.warning(f"⏱️ Таймаут при получении или вставке kp_id={kp_id}")
+                                continue
+                                
+                        yield json.dumps(movie, ensure_ascii=False) + "\n"
 
-                            yield json.dumps(movie, ensure_ascii=False) + "\n"
-
-                        except Exception as e:
-                            logger.warning(f"❌ kp_id={kp_id}: {e}")
+                    except Exception as e:
+                        logger.warning(f"❌ kp_id={kp_id}: {e}")
 
         return StreamingResponse(stream_generator(), media_type="text/plain")
