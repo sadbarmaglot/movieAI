@@ -320,14 +320,22 @@ class MovieWeaviateRecommender:
                         if not kp_id:
                             continue
 
+                        yield " \n"
+
                         try:
                             try:
-                                movie_response = await movie_manager.get_by_kp_id(kp_id=kp_id)
+                                movie_response = await asyncio.wait_for(
+                                    movie_manager.get_by_kp_id(kp_id=kp_id), timeout=5
+                                )
                                 movie = movie_response.model_dump()
                                 movie["poster_url"] = movie.get("poster_url")
                                 movie["movie_id"] = movie.get("movie_id")
-                            except HTTPException:
-                                movie_details = await self.kp_client.get_by_kp_id(kp_id=kp_id)
+                            except (HTTPException, asyncio.TimeoutError):
+                                yield " \n"
+
+                                movie_details = await asyncio.wait_for(
+                                    self.kp_client.get_by_kp_id(kp_id=kp_id), timeout=5
+                                )
                                 if not movie_details:
                                     continue
                                 await movie_manager.insert_movies([movie_details])
