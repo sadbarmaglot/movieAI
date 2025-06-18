@@ -225,55 +225,64 @@ class MovieWeaviateRecommender:
         )
 
         async def stream_generator():
-            async with AsyncSessionFactory() as session:
-                async with session.begin():
-                    movie_manager = MovieManager(session)
-                    last_yield = time.monotonic()
+            queue = asyncio.Queue()
 
-                    for movie in movies:
-                        kp_id = movie.get("kp_id")
-                        if not kp_id:
-                            continue
+            async def producer():
+                async with AsyncSessionFactory() as session:
+                    async with session.begin():
+                        movie_manager = MovieManager(session)
 
-                        start_total = time.monotonic()
+                        for movie in movies:
+                            kp_id = movie.get("kp_id")
+                            if not kp_id:
+                                continue
 
-                        try:
-                            start_lookup = time.monotonic()
+                            start_total = time.monotonic()
+
                             try:
-                                movie_response = await movie_manager.get_by_kp_id(kp_id=kp_id)
-                                movie = movie_response.model_dump()
-                                movie["poster_url"] = movie.get("poster_url")
-                                movie["movie_id"] = movie.get("movie_id")
-                                logger.info(f"🔍 В базе найден kp_id={kp_id} за {time.monotonic() - start_lookup:.3f}s")
+                                try:
+                                    movie_response = await movie_manager.get_by_kp_id(kp_id=kp_id)
+                                    movie = movie_response.model_dump()
+                                    movie["poster_url"] = movie.get("poster_url")
+                                    movie["movie_id"] = movie.get("movie_id")
 
-                            except HTTPException:
-                                logger.info(f"📡 kp_id={kp_id} не найден в БД, иду в Кинопоиск...")
+                                except HTTPException:
+                                    logger.info(f"📡 kp_id={kp_id} не найден в БД, иду в Кинопоиск...")
 
-                                if time.monotonic() - last_yield > HEARTBEAT_INTERVAL:
-                                    yield " \n"
-                                    last_yield = time.monotonic()
+                                    start_kp = time.monotonic()
+                                    movie_details = await self.kp_client.get_by_kp_id(kp_id=kp_id)
+                                    if not movie_details:
+                                        continue
+                                    logger.info(f"📥 Получен с Кинопоиска за {time.monotonic() - start_kp:.3f}s")
 
-                                start_kp = time.monotonic()
-                                movie_details = await self.kp_client.get_by_kp_id(kp_id=kp_id)
-                                if not movie_details:
-                                    continue
-                                logger.info(f"📥 Получен с Кинопоиска за {time.monotonic() - start_kp:.3f}s")
+                                    await movie_manager.insert_movies([movie_details])
 
-                                start_insert = time.monotonic()
-                                await movie_manager.insert_movies([movie_details])
-                                logger.debug(f"💾 Вставка kp_id={kp_id} в БД заняла {time.monotonic() - start_insert:.3f}s")
+                                    movie = movie_details.model_dump()
+                                    movie["poster_url"] = movie_details.google_cloud_url
+                                    movie["movie_id"] = movie_details.kp_id
 
-                                movie = movie_details.model_dump()
-                                movie["poster_url"] = movie_details.google_cloud_url
-                                movie["movie_id"] = movie_details.kp_id
+                                await queue.put(json.dumps(movie, ensure_ascii=False) + "\n")
 
-                            start_yield = time.monotonic()
-                            yield json.dumps(movie, ensure_ascii=False) + "\n"
-                            last_yield = time.monotonic()
-                            logger.info(f"📤 Отправка фильма kp_id={kp_id} заняла {time.monotonic() - start_yield:.3f}s")
-                        except Exception as e:
-                            logger.warning(f"❌ Ошибка в стриме kp_id={kp_id}: {e}\n{traceback.format_exc()}")
+                            except Exception as e:
+                                logger.warning(f"❌ Ошибка в стриме kp_id={kp_id}: {e}\n{traceback.format_exc()}")
 
                         logger.info(f"✅ Полный цикл kp_id={kp_id} занял {time.monotonic() - start_total:.3f}s\n")
+                        await queue.put(None)  # сигнал завершения
+
+            async def heartbeat():
+                while True:
+                    await asyncio.sleep(HEARTBEAT_INTERVAL)
+                    await queue.put(" \n")
+
+            producer_task = asyncio.create_task(producer())
+            heartbeat_task = asyncio.create_task(heartbeat())
+
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
+                    heartbeat_task.cancel()
+                    producer_task.cancel()
+                    break
+                yield chunk
 
         return StreamingResponse(stream_generator(), media_type="application/json")
