@@ -201,7 +201,7 @@ class MovieWeaviateRecommender:
             logger.warning(f"[MovieRAG] Ошибка запроса к Weaviate: {e}")
             return []
 
-    async def stream_movies_from_vector_search(
+    async def stream_movies_from_vector_search_old(
             self,
             user_id: int,
             query: str = None,
@@ -286,3 +286,58 @@ class MovieWeaviateRecommender:
                 yield chunk
 
         return StreamingResponse(stream_generator(), media_type="application/json")
+
+    async def stream_movies_from_vector_search(
+            self,
+            user_id: int,
+            query: str = None,
+            genres: Optional[List[str]] = None,
+            start_year: int = 1900,
+            end_year: int = 2025,
+            rating_kp: float = 5.0,
+            rating_imdb: float = 5.0,
+            exclude: Optional[List[int]] = None,
+            favorites: Optional[List[int]] = None,
+            max_results: int = 50
+    ) -> StreamingResponse:
+
+        movies = self.recommend(
+            query=query,
+            genres=genres,
+            start_year=start_year,
+            end_year=end_year,
+            rating_kp=rating_kp,
+            rating_imdb=rating_imdb,
+        )
+
+        async def stream_generator():
+            async with AsyncSessionFactory() as session:
+                async with session.begin():
+                    movie_manager = MovieManager(session)
+
+                    for movie in movies:
+                        kp_id = movie.get("kp_id")
+                        if not kp_id:
+                            continue
+
+                        try:
+                            try:
+                                movie_response = await movie_manager.get_by_kp_id(kp_id=kp_id)
+                                movie = movie_response.model_dump()
+                                movie["poster_url"] = movie.get("poster_url")
+                                movie["movie_id"] = movie.get("movie_id")
+                            except HTTPException:
+                                movie_details = await self.kp_client.get_by_kp_id(kp_id=kp_id)
+                                if not movie_details:
+                                    continue
+                                await movie_manager.insert_movies([movie_details])
+                                movie = movie_details.model_dump()
+                                movie["poster_url"] = movie_details.google_cloud_url
+                                movie["movie_id"] = movie_details.kp_id
+
+                            yield json.dumps(movie, ensure_ascii=False) + "\n"
+
+                        except Exception as e:
+                            logger.warning(f"❌ kp_id={kp_id}: {e}")
+
+        return StreamingResponse(stream_generator(), media_type="text/plain")
