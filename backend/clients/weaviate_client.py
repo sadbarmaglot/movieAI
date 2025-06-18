@@ -3,6 +3,7 @@ import math
 import logging
 import traceback
 import time
+import asyncio
 
 from openai import OpenAI
 from weaviate import WeaviateClient
@@ -51,6 +52,7 @@ def load_vectorstore_weaviate() -> WeaviateClient:
     )
     return weaviate_client
 
+HEARTBEAT_INTERVAL = 2.0
 
 class MovieWeaviateRecommender:
     def __init__(self,
@@ -226,45 +228,52 @@ class MovieWeaviateRecommender:
             async with AsyncSessionFactory() as session:
                 async with session.begin():
                     movie_manager = MovieManager(session)
+                    last_yield = time.monotonic()
 
                     for movie in movies:
-                        start_total = time.monotonic()
                         kp_id = movie.get("kp_id")
                         if not kp_id:
                             continue
 
-                        start_lookup = time.monotonic()
-                        try:
-                            # 🔍 Попытка найти в базе
-                            movie_response = await movie_manager.get_by_kp_id(kp_id=kp_id)
-                            movie = movie_response.model_dump()
-                            movie["poster_url"] = movie.get("poster_url")
-                            movie["movie_id"] = movie.get("movie_id")
-                            logger.info(f"🔍 В базе найден kp_id={kp_id} за {time.monotonic() - start_lookup:.3f}s")
+                        start_total = time.monotonic()
 
-                        except HTTPException:
-                            logger.info(f"📡 kp_id={kp_id} не найден в БД, иду в Кинопоиск...")
-                            # 📡 Если не найден — получить с Кинопоиска
-                            start_kp = time.monotonic()
-                            movie_details = await self.kp_client.get_by_kp_id(kp_id=kp_id)
-                            if not movie_details:
-                                continue
-                            logger.info(f"📥 Получен с Кинопоиска за {time.monotonic() - start_kp:.3f}s")
-
-                            start_insert = time.monotonic()
-                            await movie_manager.insert_movies([movie_details])
-                            logger.debug(f"💾 Вставка kp_id={kp_id} в БД заняла {time.monotonic() - start_insert:.3f}s")
-                            movie = movie_details.model_dump()
-                            movie["poster_url"] = movie_details.google_cloud_url
-                            movie["movie_id"] = movie_details.kp_id
-                            logger.info(f"📥 Получен с Кинопоиска за {time.monotonic() - start_kp:.3f}s")
                         try:
+                            start_lookup = time.monotonic()
+                            try:
+                                movie_response = await movie_manager.get_by_kp_id(kp_id=kp_id)
+                                movie = movie_response.model_dump()
+                                movie["poster_url"] = movie.get("poster_url")
+                                movie["movie_id"] = movie.get("movie_id")
+                                logger.info(f"🔍 В базе найден kp_id={kp_id} за {time.monotonic() - start_lookup:.3f}s")
+
+                            except HTTPException:
+                                logger.info(f"📡 kp_id={kp_id} не найден в БД, иду в Кинопоиск...")
+
+                                if time.monotonic() - last_yield > HEARTBEAT_INTERVAL:
+                                    yield " \n"
+                                    last_yield = time.monotonic()
+
+                                start_kp = time.monotonic()
+                                movie_details = await self.kp_client.get_by_kp_id(kp_id=kp_id)
+                                if not movie_details:
+                                    continue
+                                logger.info(f"📥 Получен с Кинопоиска за {time.monotonic() - start_kp:.3f}s")
+
+                                start_insert = time.monotonic()
+                                await movie_manager.insert_movies([movie_details])
+                                logger.debug(f"💾 Вставка kp_id={kp_id} в БД заняла {time.monotonic() - start_insert:.3f}s")
+
+                                movie = movie_details.model_dump()
+                                movie["poster_url"] = movie_details.google_cloud_url
+                                movie["movie_id"] = movie_details.kp_id
+
                             start_yield = time.monotonic()
                             yield json.dumps(movie, ensure_ascii=False) + "\n"
-                            logger.info(
-                                f"📤 Отправка фильма kp_id={kp_id} заняла {time.monotonic() - start_yield:.3f}s")
+                            last_yield = time.monotonic()
+                            logger.info(f"📤 Отправка фильма kp_id={kp_id} заняла {time.monotonic() - start_yield:.3f}s")
                         except Exception as e:
-                            logger.warning(f"❌ Ошибка при yield JSON: {e}\n{traceback.format_exc()}")
-                            continue
+                            logger.warning(f"❌ Ошибка в стриме kp_id={kp_id}: {e}\n{traceback.format_exc()}")
+
                         logger.info(f"✅ Полный цикл kp_id={kp_id} занял {time.monotonic() - start_total:.3f}s\n")
+
         return StreamingResponse(stream_generator(), media_type="application/json")
