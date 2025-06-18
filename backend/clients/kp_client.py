@@ -1,4 +1,5 @@
 import json
+import time
 import logging
 import aiohttp
 import asyncio
@@ -48,6 +49,39 @@ class KinopoiskClient:
             poster_url=poster_url,
             year=int(year_raw)
         )
+
+    async def get_by_kp_id(self, kp_id: int) -> Optional[MovieDetails]:
+        url = f"{self.BASE_URL}/movie/{kp_id}"
+
+        async with aiohttp.ClientSession() as session:
+            start_request = time.monotonic()
+            async with session.get(url, headers=self.headers) as response:
+                logger.info(f"[KinopoiskClient] Ответ от API пришёл за {time.monotonic() - start_request:.2f}s")
+                if response.status != 200:
+                    logger.warning(
+                        f"[KinopoiskClient] Не удалось получить фильм по kp_id={kp_id}, статус: {response.status}")
+                    return None
+                try:
+                    movie_data = await response.json()
+                except Exception as e:
+                    logger.exception(f"[KinopoiskClient] Ошибка при парсинге JSON для kp_id={kp_id}: {e}")
+                    return None
+
+        movie = self._parse_movie_data(movie_data)
+        if not movie:
+            return None
+
+        try:
+            start_download = time.monotonic()
+            google_cloud_url, background_color = await self.gc_client.download_and_upload_poster(movie.poster_url)
+            logger.info(f"[KinopoiskClient] ⏱️ Загрузка постера заняла {time.monotonic() - start_download:.2f}s")
+            movie.google_cloud_url = google_cloud_url
+            movie.background_color = background_color
+        except Exception as e:
+            logger.warning(f"[KinopoiskClient] Ошибка при загрузке постера для kp_id={kp_id}: {e}")
+            return None
+
+        return movie
 
     async def get_by_title(
         self,

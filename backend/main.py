@@ -10,9 +10,10 @@ from middlewares import (
     DBSessionMiddleware,
     LoggingMiddleware,
 )
-from clients.openai_client.rag_pipeline import MovieWeaviateRecommender, load_vectorstore_weaviate
+from clients.weaviate_client  import MovieWeaviateRecommender, load_vectorstore_weaviate
+from clients.client_factory import kp_client
 from openapi_config import custom_openapi
-from routers import health, favorites, movies, users, rag_pipeline
+from routers import health, favorites, movies, users
 from settings import ALLOW_ORIGINS
 
 logging.basicConfig(
@@ -30,6 +31,7 @@ async def lifespan(app: FastAPI):
     recommender = MovieWeaviateRecommender(
         weaviate_client=weaviate_client,
         openai_client=openai_client,
+        kp_client=kp_client
     )
     app.state.recommender = recommender
     logger.info("✅ MovieRAGRecommender initialized with Weaviate.")
@@ -63,6 +65,5 @@ def _include_routers(fastapi_app: FastAPI) -> None:
     fastapi_app.include_router(favorites.router, tags=["Favorites"])
     fastapi_app.include_router(movies.router, tags=["Movies"])
     fastapi_app.include_router(users.router, tags=["User"])
-    fastapi_app.include_router(rag_pipeline.router, tags=["Test"])
 
 app = create_app()

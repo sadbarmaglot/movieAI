@@ -24,6 +24,16 @@ class MovieStreamingRequest(BaseModel):
     favorites: Optional[List[str]] = None
 
 
+class WeaviateStreamingRequest(BaseModel):
+    user_id: int
+    genres: Optional[List[str]] = None
+    atmospheres: Optional[List[str]] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    exclude: Optional[List[int]] = None
+    favorites: Optional[List[int]] = None
+
+
 class MovieDetails(BaseModel):
     kp_id: int
     tmdb_id: Optional[int] = None
@@ -46,7 +56,7 @@ class MovieDetails(BaseModel):
         return cls(
             kp_id=movie_data["id"],
             tmdb_id=(movie_data.get("externalId") or {}).get("tmdb"),
-            title_alt=movie_data.get("alternativeName", ""),
+            title_alt=movie_data.get("alternativeName") or "",
             title_ru=movie_data.get("name", ""),
             overview=movie_data.get("description", ""),
             rating_kp=movie_data.get("rating", {}).get("kp"),

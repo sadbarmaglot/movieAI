@@ -39,9 +39,9 @@ services:
 
   weaviate:
     image: semitechnologies/weaviate:latest
-    expose:
-      - "8080"
-      - "50051"
+    ports:
+      - "8081:8080"
+      - "50051:50051"
     environment:
       CLUSTER_HOSTNAME: "node1"
       CLUSTER_GOSSIP_BIND_PORT: "7100"
