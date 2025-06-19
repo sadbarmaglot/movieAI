@@ -318,9 +318,7 @@ class MovieWeaviateRecommender:
                     movie_manager = MovieManager(session)
                     last_yield_time = time.monotonic()
 
-                    step = 0
                     for movie in movies:
-                        logger.info(f"step {step} / {len(movies)}")
                         now = time.monotonic()
 
                         if now - last_yield_time > ping_interval:
@@ -365,5 +363,5 @@ class MovieWeaviateRecommender:
 
         return StreamingResponse(
             stream_generator(),
-            media_type="text/event-stream"
+            media_type="text/plain"
         )

@@ -3,10 +3,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      - UVICORN_HTTP=h11
     command: >
       gunicorn main:app
       --workers 4
-      --preload
       --timeout 0
       --graceful-timeout 0
       --keep-alive 75
