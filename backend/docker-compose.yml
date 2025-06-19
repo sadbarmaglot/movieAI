@@ -8,13 +8,8 @@ services:
     command: >
       gunicorn main:app
       --workers 4
-      --timeout 0
-      --graceful-timeout 0
-      --keep-alive 75
       --bind 0.0.0.0:8080
       --worker-class uvicorn.workers.UvicornWorker
-      --keyfile /app/certs/privkey.pem
-      --certfile /app/certs/fullchain.pem
     ports:
       - "8080:8080"
     depends_on:
