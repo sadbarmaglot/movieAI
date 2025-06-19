@@ -48,17 +48,16 @@ class GoogleCloudClient:
         file_name = self._build_file_name(poster_url, source)
         file_path = f"https://storage.googleapis.com/{self.bucket_name}/{file_name}"
 
-        if await self.poster_exists(file_name):
-            return file_path, None
-
         async with aiohttp.ClientSession() as session:
             async with session.get(poster_url) as response:
                 if response.status == 200:
                     content = await response.read()
                     background_color = self._compute_background_color(content)
 
-                    blob = self.bucket.blob(file_name)
-                    blob.upload_from_string(content, content_type="image/jpeg")
+                    if not await self.poster_exists(file_name):
+                        blob = self.bucket.blob(file_name)
+                        blob.upload_from_string(content, content_type="image/jpeg")
+
                     return file_path, background_color
                 else:
                     logger.error("Ошибка загрузки %s: %s — %s", poster_url, response.status)
