@@ -361,4 +361,8 @@ class MovieWeaviateRecommender:
             finally:
                 yield "\n"
 
-        return StreamingResponse(stream_generator(), media_type="text/plain")
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/event-stream",
+            headers={"Transfer-Encoding": "chunked"}
+        )
