@@ -310,42 +310,50 @@ class MovieWeaviateRecommender:
             rating_imdb=rating_imdb,
         )
 
+        ping_interval = 5
+        last_yield_time = time.monotonic()
+
         async def stream_generator():
             async with AsyncSessionFactory() as session:
                 movie_manager = MovieManager(session)
 
                 for movie in movies:
+                    now = time.monotonic()
+
+                    if now - last_yield_time > ping_interval:
+                        yield "\n"
+                        last_yield_time = now
+
                     kp_id = movie.get("kp_id")
                     if not kp_id:
                         continue
 
                     try:
+                        movie_response = await asyncio.wait_for(
+                            movie_manager.get_by_kp_id(kp_id=kp_id), timeout=5
+                        )
+                        movie = movie_response.model_dump()
+                        movie["poster_url"] = movie.get("poster_url")
+                        movie["movie_id"] = movie.get("movie_id")
+                    except (HTTPException, asyncio.TimeoutError):
+                        yield " \n"
                         try:
-                            movie_response = await asyncio.wait_for(
-                                movie_manager.get_by_kp_id(kp_id=kp_id), timeout=5
+                            movie_details = await asyncio.wait_for(
+                                self.kp_client.get_by_kp_id(kp_id=kp_id), timeout=5
                             )
-                            movie = movie_response.model_dump()
-                            movie["poster_url"] = movie.get("poster_url")
-                            movie["movie_id"] = movie.get("movie_id")
-                        except (HTTPException, asyncio.TimeoutError):
-                            yield " \n"
-                            try:
-                                movie_details = await asyncio.wait_for(
-                                    self.kp_client.get_by_kp_id(kp_id=kp_id), timeout=5
-                                )
-                                if not movie_details:
-                                    continue
-                                await movie_manager.insert_movies([movie_details])
-                                movie = movie_details.model_dump()
-                                movie["poster_url"] = movie_details.google_cloud_url
-                                movie["movie_id"] = movie_details.kp_id
-                            except asyncio.TimeoutError:
-                                logger.warning(f"⏱️ Таймаут при получении или вставке kp_id={kp_id}")
+                            if not movie_details:
                                 continue
-                                
-                        yield json.dumps(movie, ensure_ascii=False) + "\n"
+                            await movie_manager.insert_movies([movie_details])
+                            movie = movie_details.model_dump()
+                            movie["poster_url"] = movie_details.google_cloud_url
+                            movie["movie_id"] = movie_details.kp_id
+                        except asyncio.TimeoutError:
+                            logger.warning(f"⏱️ Таймаут при получении или вставке kp_id={kp_id}")
+                            continue
 
-                    except Exception as e:
-                        logger.warning(f"❌ kp_id={kp_id}: {e}")
+                    yield json.dumps(movie, ensure_ascii=False) + "\n"
+                    last_yield_time = time.monotonic()
+
+            yield "\n"
 
         return StreamingResponse(stream_generator(), media_type="text/plain")
