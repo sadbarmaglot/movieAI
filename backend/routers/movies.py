@@ -92,7 +92,7 @@ async def questions_streaming(
     await check_user_stars(session, user_id=body.user_id)
     return await openai_client.stream_questions()
 
-@app.post("/weaviate-streaming-test")
+@router.post("/weaviate-streaming-test")
 async def test_stream():
     async def simple_generator():
         for i in range(50):
