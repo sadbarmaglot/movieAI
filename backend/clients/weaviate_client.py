@@ -311,11 +311,11 @@ class MovieWeaviateRecommender:
         )
 
         ping_interval = 5
-        last_yield_time = time.monotonic()
 
         async def stream_generator():
             async with AsyncSessionFactory() as session:
                 movie_manager = MovieManager(session)
+                last_yield_time = time.monotonic()
 
                 for movie in movies:
                     now = time.monotonic()
