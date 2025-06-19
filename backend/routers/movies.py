@@ -2,7 +2,7 @@ import re
 import json
 import asyncio
 
-from fastapi import APIRouter, Depends, Request, HTTPException, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Request, HTTPException, status
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -181,3 +181,14 @@ async def preview_movie(
         "movie_id": movie_id,
         "ref_user_id": ref_user_id
     })
+
+@router.websocket("/ws-stream")
+async def websocket_stream(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        for i in range(1, 51):
+            await asyncio.sleep(0.3)  # Задержка между сообщениями
+            await websocket.send_text(json.dumps({"index": i}))
+        await websocket.send_text(json.dumps({"done": True}))
+    except WebSocketDisconnect:
+        print("❌ Клиент отключился")
