@@ -365,6 +365,5 @@ class MovieWeaviateRecommender:
 
         return StreamingResponse(
             stream_generator(),
-            media_type="text/event-stream",
-            headers={"Transfer-Encoding": "chunked"}
+            media_type="text/event-stream"
         )

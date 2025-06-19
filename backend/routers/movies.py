@@ -1,8 +1,9 @@
 import re
+import json
 import asyncio
 
 from fastapi import APIRouter, Depends, Request, HTTPException, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
@@ -90,6 +91,15 @@ async def questions_streaming(
 ):
     await check_user_stars(session, user_id=body.user_id)
     return await openai_client.stream_questions()
+
+@app.post("/weaviate-streaming-test")
+async def test_stream():
+    async def simple_generator():
+        for i in range(50):
+            yield json.dumps({"index": i}) + "\n"
+            await asyncio.sleep(1)
+
+    return StreamingResponse(simple_generator(), media_type="text/plain")
 
 @router.post("/weaviate-streaming")
 async def weaviate_streaming(
