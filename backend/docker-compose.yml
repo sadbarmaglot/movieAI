@@ -3,8 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    environment:
-      - UVICORN_HTTP=h11
     command: >
       gunicorn main:app
       --workers 4

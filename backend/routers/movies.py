@@ -1,6 +1,7 @@
 import re
 import json
 import asyncio
+import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Request, HTTPException, status
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -21,6 +22,8 @@ from models import (
 from routers.dependencies import get_session, get_movie_manager
 from routers.auth import check_user_stars
 from settings import ATMOSPHERE_MAPPING
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -182,13 +185,49 @@ async def preview_movie(
         "ref_user_id": ref_user_id
     })
 
-@router.websocket("/ws-stream")
-async def websocket_stream(websocket: WebSocket):
+
+@router.websocket("/weaviate-streaming")
+async def weaviate_streaming_ws(websocket: WebSocket):
     await websocket.accept()
     try:
-        for i in range(1, 51):
-            await asyncio.sleep(0.3)  # Задержка между сообщениями
-            await websocket.send_text(json.dumps({"index": i}))
-        await websocket.send_text(json.dumps({"done": True}))
+        data = await websocket.receive_json()
+        user_id = data["user_id"]
+        start_year = data.get("start_year", 1900)
+        end_year = data.get("end_year", 2025)
+        rating_kp = data.get("rating_kp", 5.0)
+        rating_imdb = data.get("rating_imdb", 5.0)
+        exclude = data.get("exclude")
+        favorites = data.get("favorites")
+
+        genres = data.get("genres")
+        if genres and "любой" in genres:
+            genres = None
+
+        atmospheres = data.get("atmospheres")
+        if atmospheres and "любой" in atmospheres:
+            query = None
+        else:
+            query = ",".join([ATMOSPHERE_MAPPING[a] for a in atmospheres]) if atmospheres else None
+
+        recommender: MovieWeaviateRecommender = websocket.app.state.recommender
+
+        async for movie in recommender.stream_movies_generator(
+                user_id=user_id,
+                query=query,
+                genres=genres,
+                start_year=start_year,
+                end_year=end_year,
+                rating_kp=rating_kp,
+                rating_imdb=rating_imdb,
+                exclude=exclude,
+                favorites=favorites
+        ):
+            await websocket.send_text(json.dumps(movie, ensure_ascii=False))
+
+        await websocket.send_text("__END__")
+
     except WebSocketDisconnect:
-        print("❌ Клиент отключился")
+        logger.info("🔌 WebSocket отключился")
+    except Exception as e:
+        logger.error(f"❌ Ошибка в WebSocket: {e}")
+        await websocket.send_text("__ERROR__")
