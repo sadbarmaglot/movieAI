@@ -8,6 +8,7 @@ from db_managers.base import (
     BaseManager,
     movies,
     skipped_movies,
+    favorite_movies,
     read_only,
     transactional
 )
@@ -102,7 +103,6 @@ class MovieManager(BaseManager):
     async def insert_movies(self, movies_data: List[MovieDetails]) -> None:
         """
         Асинхронно вставляет новые строки в таблицу movies.
-
         :param movies_data: список объектов MovieDetails с данными фильмов
         """
         for movie_data in movies_data:
@@ -121,7 +121,6 @@ class MovieManager(BaseManager):
     async def add_skipped_movies(self, user_id: int, kp_id: int) -> None:
         """
         Асинхронно вставляет новые строки в таблицу skipped_movies.
-
         :param user_id: ID пользователя
         :param kp_id: ID фильма на Кинопоиске
 
@@ -143,6 +142,15 @@ class MovieManager(BaseManager):
 
         result = await self.session.execute(
             select(skipped_movies).where(skipped_movies.c.user_id == user_id) # type: ignore
+        )
+        rows = result.fetchall()
+        return [row.kp_id for row in rows]
+
+    @read_only
+    async def get_favorites(self, user_id: int) -> List[int]:
+
+        result = await self.session.execute(
+            select(favorite_movies).where(favorite_movies.c.user_id == user_id) # type: ignore
         )
         rows = result.fetchall()
         return [row.kp_id for row in rows]

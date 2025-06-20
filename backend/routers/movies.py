@@ -96,45 +96,6 @@ async def questions_streaming(
     await check_user_stars(session, user_id=body.user_id)
     return await openai_client.stream_questions()
 
-@router.post("/weaviate-streaming-test")
-async def test_stream():
-    async def simple_generator():
-        for i in range(50):
-            yield json.dumps({"index": i}) + "\n"
-            await asyncio.sleep(1)
-
-    return StreamingResponse(simple_generator(), media_type="text/plain")
-
-@router.post("/weaviate-streaming")
-async def weaviate_streaming(
-    request: Request,
-    body: WeaviateStreamingRequest,
-    # session: AsyncSession = Depends(get_session),
-):
-    # await check_user_stars(session, user_id=body.user_id)
-    recommender: MovieWeaviateRecommender = request.app.state.recommender
-
-    if "любой" in body.atmospheres:
-        query = None
-    else:
-        query = ",".join([ATMOSPHERE_MAPPING[atmosphere] for atmosphere in body.atmospheres])
-
-    if "любой" in body.genres:
-        genres = None
-    else:
-        genres = body.genres
-
-    return await recommender.stream_movies_from_vector_search(
-        user_id=body.user_id,
-        query=query,
-        genres=genres,
-        start_year=body.start_year,
-        end_year=body.end_year,
-        exclude=body.exclude,
-        favorites=body.favorites
-    )
-
-
 @router.post("/movies-streaming")
 async def movies_streaming(
     body: MovieStreamingRequest,
@@ -197,7 +158,6 @@ async def weaviate_streaming_ws(websocket: WebSocket):
         end_year = data.get("end_year", 2025)
         rating_kp = data.get("rating_kp", 5.0)
         rating_imdb = data.get("rating_imdb", 5.0)
-        favorites = data.get("favorites")
 
         genres = data.get("genres")
         if genres and "любой" in genres:
@@ -211,24 +171,23 @@ async def weaviate_streaming_ws(websocket: WebSocket):
 
         recommender: MovieWeaviateRecommender = websocket.app.state.recommender
 
-        async for movie in recommender.stream_movies_generator(
+        async for movie in recommender.movie_generator(
                 user_id=user_id,
                 query=query,
                 genres=genres,
                 start_year=start_year,
                 end_year=end_year,
                 rating_kp=rating_kp,
-                rating_imdb=rating_imdb,
-                favorites=favorites
+                rating_imdb=rating_imdb
         ):
             await websocket.send_text(json.dumps(movie, ensure_ascii=False))
 
         await websocket.send_text("__END__")
 
     except WebSocketDisconnect:
-        logger.info("🔌 WebSocket отключился")
+        logger.info("WebSocket отключился")
     except Exception as e:
-        logger.error(f"❌ Ошибка в WebSocket: {e}")
+        logger.error(f"Ошибка в WebSocket: {e}")
         await websocket.send_text("__ERROR__")
 
 
