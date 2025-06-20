@@ -17,7 +17,6 @@ from models import (
     MovieResponse,
     MovieStreamingRequest,
     QuestionStreamingRequest,
-    WeaviateStreamingRequest,
     AddSkippedRequest
 )
 from routers.dependencies import get_session, get_movie_manager
@@ -158,6 +157,7 @@ async def weaviate_streaming_ws(websocket: WebSocket):
         end_year = data.get("end_year", 2025)
         rating_kp = data.get("rating_kp", 5.0)
         rating_imdb = data.get("rating_imdb", 5.0)
+        movie_name = data.get("movie_name", None)
 
         genres = data.get("genres")
         if genres and "любой" in genres:
@@ -174,6 +174,7 @@ async def weaviate_streaming_ws(websocket: WebSocket):
         async for movie in recommender.movie_generator(
                 user_id=user_id,
                 query=query,
+                movie_name=movie_name,
                 genres=genres,
                 start_year=start_year,
                 end_year=end_year,

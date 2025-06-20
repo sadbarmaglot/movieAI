@@ -24,16 +24,6 @@ class MovieStreamingRequest(BaseModel):
     favorites: Optional[List[str]] = None
 
 
-class WeaviateStreamingRequest(BaseModel):
-    user_id: int
-    genres: Optional[List[str]] = None
-    atmospheres: Optional[List[str]] = None
-    start_year: Optional[int] = None
-    end_year: Optional[int] = None
-    exclude: Optional[List[int]] = None
-    favorites: Optional[List[int]] = None
-
-
 class MovieDetails(BaseModel):
     kp_id: int
     tmdb_id: Optional[int] = None

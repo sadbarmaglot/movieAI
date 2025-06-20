@@ -99,7 +99,7 @@ class MovieWeaviateRecommender:
 
         return round(score, 2)
 
-    def search(self, query: str):
+    def search(self, query: str) -> List[MovieObject]:
         embedding = self.openai_client.embeddings.create(
             input=query,
             model=self.model_name
@@ -111,21 +111,26 @@ class MovieWeaviateRecommender:
                 query=query,
                 alpha=0.3,
                 limit=self.top_k_search,
-                return_properties=["kp_id"]
+                return_properties=[
+                    "kp_id", "year", "genres", "countries",
+                    "rating_kp", "rating_imdb", "votes_kp", "votes_imdb", "page_content"
+                ]
             )
 
-            objects = [
-                obj.properties for obj in results.objects
-                if obj.properties.get("popularity_score", 0) >= 5
-            ]
+            objects = []
+            for obj in results.objects:
+                score = self._dynamic_score(obj.properties)
+                if score > 0:
+                    obj.properties["dynamic_score"] = score
+                    objects.append(obj.properties)
 
-            reranked = sorted(objects, key=lambda x: x["popularity_score"], reverse=True)
-
-            return reranked[:10]
+            movies: List[MovieObject] = sorted(objects, key=lambda x: x["dynamic_score"], reverse=True)[:10]
+            return movies
 
         except Exception as e:
-            logger.warning(f"[MovieSearch] Ошибка запроса к Weaviate: {e}")
+            logger.warning(f"[MovieRAG] Ошибка запроса к Weaviate: {e}")
             return []
+
 
     def recommend(self,
                   query: str = None,
@@ -142,11 +147,11 @@ class MovieWeaviateRecommender:
                   Filter.by_property("rating_kp").greater_than(rating_kp) & \
                   Filter.by_property("rating_imdb").greater_than(rating_imdb)
 
-        if genres:
+        if genres is not None:
             filters = filters & Filter.by_property("genres").contains_any(genres)
 
         try:
-            if query:
+            if query is not None:
                 embedding = self.openai_client.embeddings.create(
                     input=query,
                     model=self.model_name
@@ -197,6 +202,7 @@ class MovieWeaviateRecommender:
             self,
             user_id: int,
             query: str = None,
+            movie_name: str = None,
             genres: Optional[List[str]] = None,
             start_year: int = 1900,
             end_year: int = 2025,
@@ -206,20 +212,21 @@ class MovieWeaviateRecommender:
         async with AsyncSessionFactory() as session:
             movie_manager = MovieManager(session)
 
-            exclude_list = await movie_manager.get_skipped(user_id=user_id)
-            favorite_list = await movie_manager.get_favorites(user_id=user_id)
-
-            exclude_list.extend(favorite_list)
-
-            movies = self.recommend(
-                query=query,
-                genres=genres,
-                start_year=start_year,
-                end_year=end_year,
-                rating_kp=rating_kp,
-                rating_imdb=rating_imdb,
-                exclude_kp_ids=exclude_list
-            )
+            if movie_name is not None:
+                movies = self.search(query=movie_name)
+            else:
+                exclude_list = await movie_manager.get_skipped(user_id=user_id)
+                favorite_list = await movie_manager.get_favorites(user_id=user_id)
+                exclude_list.extend(favorite_list)
+                movies = self.recommend(
+                    query=query,
+                    genres=genres,
+                    start_year=start_year,
+                    end_year=end_year,
+                    rating_kp=rating_kp,
+                    rating_imdb=rating_imdb,
+                    exclude_kp_ids=exclude_list
+                )
 
             for movie in movies:
                 kp_id = movie.get("kp_id")

@@ -5,7 +5,6 @@ from .movies import (
     MovieResponse,
     MovieDetails,
     MovieStreamingRequest,
-    WeaviateStreamingRequest,
     AddSkippedRequest
 )
 from .favorites import AddFavoriteRequest, GetFavoriteResponse, DeleteFavoriteRequest, WatchFavoriteRequest
@@ -13,6 +12,5 @@ from .favorites import AddFavoriteRequest, GetFavoriteResponse, DeleteFavoriteRe
 __all__ = [
     "UserInitRequest", "UserInitResponse", "ReferralRequestModel", "PaymentRequest", "LogEventRequest",
     "ChatQA", "QuestionStreamingRequest", "MovieStreamingRequest", "MovieDetails", "MovieResponse",
-    "AddFavoriteRequest", "GetFavoriteResponse", "DeleteFavoriteRequest", "WatchFavoriteRequest",
-    "WeaviateStreamingRequest", "AddSkippedRequest"
+    "AddFavoriteRequest", "GetFavoriteResponse", "DeleteFavoriteRequest", "WatchFavoriteRequest", "AddSkippedRequest"
 ]
