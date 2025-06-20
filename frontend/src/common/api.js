@@ -1,4 +1,5 @@
 const API_BASE_URL = "https://auto-gens.com";
+const API_BASE_URL_WEBSOCKET = "wss://auto-gens.com";
 const apiKey = (
   typeof import.meta !== 'undefined' &&
   import.meta.env &&
@@ -57,7 +58,8 @@ export async function apiPostStream(endpoint, body = {}, onData, onComplete, onE
         const response = await fetch(url, {
             method: "POST",
             headers,
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            keepalive: true
         });
 
         if (!response.ok) {
@@ -83,8 +85,23 @@ export async function apiPostStream(endpoint, body = {}, onData, onComplete, onE
         const decoder = new TextDecoder();
         let buffer = "";
 
+        async function readWithTimeout(reader, timeout = 60000) {
+            return await Promise.race([
+                reader.read(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error("⏱️ Timeout while reading stream")), timeout))
+            ]);
+        }
+
         while (true) {
-            const {done, value} = await reader.read();
+            let result;
+            try {
+                result = await readWithTimeout(reader);
+            } catch (e) {
+                console.error("💥 Ошибка при чтении потока:", e);
+                if (typeof onError === "function") onError(e);
+                return;
+            }
+            const {done, value} = result;
             if (done) break;
 
             buffer += decoder.decode(value, {stream: true});
@@ -118,6 +135,46 @@ export async function apiPostStream(endpoint, body = {}, onData, onComplete, onE
     }
 }
 
+export function apiWebSocketStream(endpoint, body = {}, onData, onComplete, onError, initData) {
+    const socket = new WebSocket(`${API_BASE_URL_WEBSOCKET}${endpoint}`);
+
+    socket.onopen = () => {
+        socket.send(JSON.stringify({
+            ...body,
+            init_data: initData
+        }));
+    };
+
+    socket.onmessage = (event) => {
+        if (event.data === "__END__") {
+            if (typeof onComplete === "function") onComplete();
+            socket.close();
+            return;
+        }
+
+        if (event.data === "__ERROR__") {
+            const err = new Error("Ошибка на сервере при стриминге");
+            if (typeof onError === "function") onError(err);
+            socket.close();
+            return;
+        }
+
+        try {
+            const json = JSON.parse(event.data);
+            onData(json);
+        } catch (e) {
+            console.warn("⚠️ Ошибка парсинга JSON из WS:", event.data);
+        }
+    };
+
+    socket.onerror = (e) => {
+        console.error("🔌 WebSocket ошибка:", e);
+        if (typeof onError === "function") onError(e);
+    };
+
+    return socket;
+}
+
 export async function fetchFavorites(userId, initData) {
     try {
         return await apiGet("/get-favorites", { user_id: userId }, initData);
@@ -139,6 +196,18 @@ export async function addToFavorites(userId, currentMovie, favoriteMovies, initD
         } catch (error) {
             console.error("Ошибка при добавлении в избранное:", error);
         }
+    }
+}
+
+export async function addToSkipped(userId, currentMovie, initData) {
+   try {
+        await apiPost(
+            "/add-skipped",
+            {user_id: userId, movie_id: currentMovie.movie_id},
+            initData
+        );
+    } catch (error) {
+        console.error("Ошибка при добавлении в пропущенные:", error);
     }
 }
 

@@ -54,7 +54,7 @@
 
         .card {
             background: rgba(255, 255, 255, 0.1);
-            padding: 20px;
+            padding: 15px;
             border-radius: 15px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -72,6 +72,10 @@
             display: block;
             font-size: 1.8rem;
             margin-bottom: 5px;
+        }
+
+        .card span:last-child {
+          font-size: 1rem;
         }
 
         .bottom-nav {
@@ -115,37 +119,40 @@
 </head>
 <body>
     <div class="header">
-        <h1>Привет, киноман!</h1>
-        <p>Как ты хочешь выбрать фильм?</p>
+        <h1 data-key="title_greeting">Привет, киноман!</h1>
+        <p data-key="subtitle_question">Как ты хочешь выбрать фильм?</p>
     </div>
     <div class="cards-container">
         <div class="card" data-href="category.html">
-            <span>📂</span> Категории
+            <span>📂</span>
+            <span data-key="card_category" ></span>
         </div>
         <div class="card" data-href="chat.html">
-            <span>💬</span> В чате
+            <span>💬</span>
+            <span data-key="card_chat"></span>
         </div>
         <div class="card" data-href="search.html">
-            <span>🔍</span> Название
+            <span>🔍</span>
+            <span data-key="card_title"></span>
         </div>
     </div>
 
     <div class="bottom-nav">
-          <div class="nav-button" data-href="index.html" data-key="nav_search">
+          <div class="nav-button" data-href="index.html">
             <span>🔍</span>
-            <div></div>
-        </div>
-        <div class="nav-button" data-href="matching.html" data-key="nav_matching">
+            <div data-key="nav_search"></div>
+          </div>
+        <div class="nav-button" data-href="matching.html">
             <span>🎬</span>
-            <div></div>
+            <div data-key="nav_matching"></div>
         </div>
-        <div class="nav-button" data-href="favorites.html" data-key="nav_favorites">
+        <div class="nav-button" data-href="favorites.html">
             <span>❤️</span>
-            <div></div>
+            <div data-key="nav_favorites"></div>
         </div>
-        <div class="nav-button" data-href="profile.html" data-key="nav_profile">
+        <div class="nav-button" data-href="profile.html">
             <span>👤</span>
-            <div></div>
+            <div data-key="nav_profile"></div>
         </div>
     </div>
 

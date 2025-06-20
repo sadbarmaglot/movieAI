@@ -2,8 +2,10 @@ import {
     apiGet,
     apiPost,
     apiPostStream,
+    apiWebSocketStream,
     fetchFavorites,
     addToFavorites,
+    addToSkipped,
     logEvent
 } from "../common/api.js";
 import {
@@ -186,28 +188,52 @@ async function fetchStreamingResponse() {
         }
     }
 
-    const endpoint = "/movies-streaming";
-    const requestBody = {
-        user_id: userId,
-        chat_answers: userAnswers,
-        categories: JSON.parse(storedData["movieCategories"] || "[]"),
-        atmospheres: JSON.parse(storedData["movieAtmospheres"] || "[]"),
-        description: storedData["movieDescription"],
-        suggestion: storedData["movieSuggestion"],
-        start_year: yearStart,
-        end_year: yearEnd,
-        exclude: Array.from(excludedMovies),
-        favorites: favoriteMovies.map(movie => movie.title_alt)
-    };
+    const useLegacyEndpoint =
+        userAnswers.length > 0 ||
+        Boolean(storedData["movieDescription"]) ||
+        Boolean(storedData["movieSuggestion"]);
 
-    await apiPostStream(
-        endpoint,
-        requestBody,
-        handleNewMovie,
-        handleStreamComplete,
-        handleStreamError,
-        initData
-    );
+    if (useLegacyEndpoint) {
+        const requestBody = {
+            user_id: userId,
+            chat_answers: userAnswers,
+            genres: JSON.parse(storedData["movieCategories"] || "[]"),
+            atmospheres: JSON.parse(storedData["movieAtmospheres"] || "[]"),
+            description: storedData["movieDescription"],
+            suggestion: storedData["movieSuggestion"],
+            movie_name: storedData["movieSearch"],
+            start_year: yearStart,
+            end_year: yearEnd,
+            exclude: Array.from(excludedMovies),
+            favorites: favoriteMovies.map(movie => movie.title_alt)
+        };
+
+        await apiPostStream(
+            "/movies-streaming",
+            requestBody,
+            handleNewMovie,
+            handleStreamComplete,
+            handleStreamError,
+            initData
+        );
+    } else {
+        const requestBody = {
+            user_id: userId,
+            genres: JSON.parse(storedData["movieCategories"] || "[]"),
+            atmospheres: JSON.parse(storedData["movieAtmospheres"] || "[]"),
+            movie_name: storedData["movieSearch"],
+            start_year: yearStart,
+            end_year: yearEnd,
+        };
+        await apiWebSocketStream(
+            "/weaviate-streaming",
+            requestBody,
+            handleNewMovie,
+            handleStreamComplete,
+            handleStreamError,
+            initData
+            );
+    }
 }
 
 function updateMovieInfo(card, movie) {
@@ -296,7 +322,10 @@ async function _showNextMovieUnified() {
             },
             onSkip: async (movie) => {
                 void logEvent(userId, "skip", initData);
-                if (!isSearchMode) excludedMovies.push(movie.title_alt);
+                if (!isSearchMode) {
+                    excludedMovies.push(movie.title_alt);
+                    await addToSkipped(userId, movie, initData);
+                }
                 const skipBtn = document.getElementById('skip-button');
                 skipBtn.classList.add('pulse');
                 setTimeout(() => skipBtn.classList.remove('pulse'), 200);
@@ -425,7 +454,10 @@ document.getElementById('favorite-button').addEventListener('click', async () =>
 document.getElementById('skip-button').addEventListener('click', async() => {
     vibrateOnClick();
     void logEvent(userId, "skip_button", initData);
-    if (!isSearchMode) excludedMovies.push(currentMovie.title_alt);
+    if (!isSearchMode) {
+        excludedMovies.push(currentMovie.title_alt);
+        await addToSkipped(userId, currentMovie, initData);
+    }
     if (pendingAutoShow) {
         pendingAutoShow = false;
     }
@@ -466,8 +498,8 @@ window.addEventListener('pagehide', () => {
 function initializeFromSession() {
     const restored = restoreMovieSession();
     movieQueue = restored.movieQueue;
-    currentMovie = restored.currentMovie;
     excludedMovies = restored.excludedMovies;
+    currentMovie = restored.currentMovie;
     favoriteMovies = restored.favoriteMovies;
     Object.assign(storedData, restored.storedData);
 }
@@ -489,23 +521,12 @@ async function initializeMatching() {
     initializeFromSession();
 
     if (!hasSession && hasCriteria) {
-        if (isSearchMode) {
-            const endpoint = "/search-movies";
-            const params = {movie_name: storedData["movieSearch"]};
-            showLoader();
-            apiGet(endpoint, params, initData).then(result => {
-                movieQueue = result;
-                hideLoader();
-                showNextMovieUnified();
-            });
-        } else {
-            showLoader();
-            fetchFavorites(userId, initData).then(result => {
-                favoriteMovies = result;
-                isTransitionInProgress = false;
-                fetchStreamingResponse();
-            });
-        }
+        showLoader();
+        fetchFavorites(userId, initData).then(result => {
+            favoriteMovies = result;
+            isTransitionInProgress = false;
+            fetchStreamingResponse();
+        });
     } else {
         if (currentMovie) {
             console.log("🔄 Восстановлен фильм из сессии:", currentMovie.title_alt);
@@ -551,8 +572,11 @@ async function showCurrentMovieFromSession(movie) {
                 }
             },
             onSkip: async (movie) => {
-                void logEvent(userId, "like", initData);
-                if (!isSearchMode) excludedMovies.push(movie.title_alt);
+                void logEvent(userId, "skip", initData);
+                if (!isSearchMode) {
+                    excludedMovies.push(movie.title_alt);
+                    await addToSkipped(userId, movie, initData);
+                }
                 const skipBtn = document.getElementById('skip-button');
                 skipBtn.classList.add('pulse');
                 setTimeout(() => skipBtn.classList.remove('pulse'), 200);

@@ -8,12 +8,26 @@ export const TEXTS = {
     nav_matching: "Matching",
     nav_favorites: "Favorites",
     nav_profile: "Profile",
+
+    title_greeting: "Welcome to MovieAI!",
+    subtitle_question: "How do you want to pick a movie?",
+
+    card_category: "By category",
+    card_chat: "In chat",
+    card_title: "By title"
   },
   ru: {
     nav_search: "Поиск",
     nav_matching: "Подбор",
     nav_favorites: "Избранное",
     nav_profile: "Профиль",
+
+    title_greeting: "Привет, киноман!",
+    subtitle_question: "Как ты хочешь выбрать фильм?",
+
+    card_category: "Категории",
+    card_chat: "В чате",
+    card_title: "Название"
   }
 };
 
@@ -40,4 +54,14 @@ export function initBottomNav() {
   });
 
   nav.classList.add("ready");
+}
+
+export function initLocalization() {
+  document.querySelectorAll("[data-key]").forEach((el) => {
+    const key = el.dataset.key;
+    const value = t(key);
+    el.textContent = value;
+  });
+
+  initBottomNav();
 }

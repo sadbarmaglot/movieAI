@@ -8,7 +8,7 @@ import {
     fetchUserBalance
 } from "../common/telegram.js";
 
-import { initBottomNav } from "../common/i18n.js";
+import { initLocalization } from "../common/i18n.js";
 
 if (initData && initData !== "test") {
     tg.ready();
@@ -67,7 +67,7 @@ function attachEventListeners() {
 
 document.addEventListener("DOMContentLoaded", async () => {
     tgBackButton.hide();
-    initBottomNav();
+    initLocalization();
     document.querySelector(".bottom-nav")?.classList.add("ready");
     await logEvent(userId, "open", initData, startParam);
     attachEventListeners();
