@@ -197,7 +197,6 @@ async def weaviate_streaming_ws(websocket: WebSocket):
         end_year = data.get("end_year", 2025)
         rating_kp = data.get("rating_kp", 5.0)
         rating_imdb = data.get("rating_imdb", 5.0)
-        exclude = data.get("exclude")
         favorites = data.get("favorites")
 
         genres = data.get("genres")
@@ -220,7 +219,6 @@ async def weaviate_streaming_ws(websocket: WebSocket):
                 end_year=end_year,
                 rating_kp=rating_kp,
                 rating_imdb=rating_imdb,
-                exclude=exclude,
                 favorites=favorites
         ):
             await websocket.send_text(json.dumps(movie, ensure_ascii=False))
