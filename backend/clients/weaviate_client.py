@@ -66,11 +66,11 @@ class MovieWeaviateRecommender:
     @staticmethod
     def _dynamic_score(item: dict) -> float:
 
-        rating_kp = item.get("rating_kp", 0.0)
-        rating_imdb = item.get("rating_imdb", 0.0)
-        votes_kp = item.get("votes_kp", 0)
-        votes_imdb = item.get("votes_imdb", 0)
-        year = item.get("year", 2000)
+        rating_kp = item.get("rating_kp") or 0.0
+        rating_imdb = item.get("rating_imdb") or 0.0
+        votes_kp = item.get("votes_kp") or 0
+        votes_imdb = item.get("votes_imdb") or 0
+        year = item.get("year") or 2000
         genres = [g.lower() for g in item.get("genres", [])]
         countries = item.get("countries", []) or []
         content = item.get("page_content", "").lower()
