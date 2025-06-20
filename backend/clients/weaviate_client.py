@@ -22,8 +22,6 @@ from settings import (
     CLASS_NAME
 )
 
-from movieai.backend.db_managers.base import favorite_movies
-
 logger = logging.getLogger(__name__)
 
 class MovieObject(TypedDict):
