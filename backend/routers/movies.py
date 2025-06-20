@@ -17,7 +17,8 @@ from models import (
     MovieResponse,
     MovieStreamingRequest,
     QuestionStreamingRequest,
-    WeaviateStreamingRequest
+    WeaviateStreamingRequest,
+    AddSkippedRequest
 )
 from routers.dependencies import get_session, get_movie_manager
 from routers.auth import check_user_stars
@@ -231,3 +232,11 @@ async def weaviate_streaming_ws(websocket: WebSocket):
     except Exception as e:
         logger.error(f"❌ Ошибка в WebSocket: {e}")
         await websocket.send_text("__ERROR__")
+
+
+@router.post("/add-skipped")
+async def add_favorite_movie(
+    body: AddSkippedRequest,
+    movie_manager: MovieManager = Depends(get_movie_manager)
+):
+    await movie_manager.add_skipped_movies(user_id=body.user_id, kp_id=body.movie_id)

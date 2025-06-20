@@ -98,3 +98,7 @@ class MovieResponse(BaseModel):
             countries=movie.countries,
             background_color=movie.background_color,
         )
+
+class AddSkippedRequest(BaseModel):
+    user_id: int
+    movie_id: int

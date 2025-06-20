@@ -7,6 +7,7 @@ from sqlalchemy import select, insert
 from db_managers.base import (
     BaseManager,
     movies,
+    skipped_movies,
     read_only,
     transactional
 )
@@ -115,3 +116,33 @@ class MovieManager(BaseManager):
             else:
                 await self.session.execute(insert(movies).values(**movie_data.model_dump()))
                 logger.info("✅ Фильм %s добавлен в БД", movie_data.title_alt)
+
+    @transactional
+    async def add_skipped_movies(self, user_id: int, kp_id: int) -> None:
+        """
+        Асинхронно вставляет новые строки в таблицу skipped_movies.
+
+        :param user_id: ID пользователя
+        :param kp_id: ID фильма на Кинопоиске
+
+        """
+        result = await self.session.execute(
+            select(skipped_movies).where(
+                (skipped_movies.c.user_id == user_id) &  # type: ignore
+                (skipped_movies.c.kp_id == kp_id)  # type: ignore
+            )
+        )
+        exists = result.scalar_one_or_none()
+        if not exists:
+            await self.session.execute(
+                insert(skipped_movies).values(user_id=user_id, kp_id=kp_id)
+            )
+
+    @read_only
+    async def get_skipped(self, user_id: int) -> List[int]:
+
+        result = await self.session.execute(
+            select(skipped_movies).where(skipped_movies.c.user_id == user_id) # type: ignore
+        )
+        rows = result.fetchall()
+        return [row.kp_id for row in rows]

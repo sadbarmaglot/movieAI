@@ -57,8 +57,8 @@ favorite_movies = Table(
 skipped_movies = Table(
     "skipped_movies", metadata,
     Column("id", Integer, primary_key=True),
-    Column("user_id", BigInteger, unique=True, nullable=False),
-    Column("tmdb_id", Integer, unique=True, nullable=False),
+    Column("user_id", BigInteger, unique=False, nullable=False),
+    Column("kp_id", Integer, unique=False, nullable=False),
 )
 
 payments = Table(

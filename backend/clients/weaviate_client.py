@@ -148,7 +148,8 @@ class MovieWeaviateRecommender:
                   start_year: int = 1900,
                   end_year: int = 2025,
                   rating_kp: float = 0.0,
-                  rating_imdb: float = 0.0
+                  rating_imdb: float = 0.0,
+                  exclude_kp_ids: Optional[List[int]] = None
                   ) -> List[MovieObject]:
 
         filters = Filter.by_property("year").greater_than(start_year) & \
@@ -188,13 +189,19 @@ class MovieWeaviateRecommender:
                 )
 
             objects = []
+            exclude_set = set(exclude_kp_ids) if exclude_kp_ids else set()
+
             for obj in results.objects:
+                kp_id = obj.properties.get("kp_id")
+                if kp_id in exclude_set:
+                    continue
+
                 score = self._dynamic_score(obj.properties)
                 if score > 0:
                     obj.properties["dynamic_score"] = score
                     objects.append(obj.properties)
 
-            movies: List[MovieObject] = sorted(objects, key=lambda x: x["dynamic_score"], reverse=True)
+            movies: List[MovieObject] = sorted(objects, key=lambda x: x["dynamic_score"], reverse=True)[:100]
             return movies
 
         except Exception as e:
@@ -375,20 +382,24 @@ class MovieWeaviateRecommender:
             end_year: int = 2025,
             rating_kp: float = 5.0,
             rating_imdb: float = 5.0,
-            exclude: Optional[List[int]] = None,
             favorites: Optional[List[int]] = None,
     ):
-        movies = self.recommend(
-            query=query,
-            genres=genres,
-            start_year=start_year,
-            end_year=end_year,
-            rating_kp=rating_kp,
-            rating_imdb=rating_imdb,
-        )
-
         async with AsyncSessionFactory() as session:
             movie_manager = MovieManager(session)
+
+            exclude_list = await movie_manager.get_skipped(user_id=user_id)
+
+            movies = self.recommend(
+                query=query,
+                genres=genres,
+                start_year=start_year,
+                end_year=end_year,
+                rating_kp=rating_kp,
+                rating_imdb=rating_imdb,
+                exclude_kp_ids=exclude_list
+            )
+
+
             for movie in movies:
                 kp_id = movie.get("kp_id")
                 if not kp_id:
@@ -409,6 +420,7 @@ class MovieWeaviateRecommender:
                         if not movie_details:
                             continue
                         await movie_manager.insert_movies([movie_details])
+                        await session.commit()
                         movie = movie_details.model_dump()
                         movie["poster_url"] = movie_details.google_cloud_url
                         movie["movie_id"] = movie_details.kp_id
