@@ -1,5 +1,5 @@
 import { logEvent } from "../common/api.js"
-import { initLocalization } from "../common/i18n.js";
+import { initBottomNav } from "../common/i18n.js";
 import {
     tg,
     userId,
@@ -147,7 +147,7 @@ slider.noUiSlider.on("update", function (values) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     backButton("index.html");
-    initLocalization();
+    initBottomNav();
     void logEvent(userId, "open", initData);
 
     const defaultCategory = document.querySelector('.category[data-category="любой"]');
