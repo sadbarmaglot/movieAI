@@ -157,7 +157,7 @@ async def weaviate_streaming_ws(websocket: WebSocket):
         end_year = data.get("end_year", 2025)
         rating_kp = data.get("rating_kp", 5.0)
         rating_imdb = data.get("rating_imdb", 5.0)
-        movie_name = data.get("movie_name", None)
+        movie_name = data.get("movie_name") or None
 
         genres = data.get("genres")
         if genres and "любой" in genres:
