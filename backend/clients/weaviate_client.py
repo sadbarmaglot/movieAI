@@ -168,10 +168,11 @@ class MovieWeaviateRecommender:
     @staticmethod
     def _skip_due_to_genre_conflict(movie_genres: List[str], selected_genres: List[str]) -> bool:
         """
-        Пропускает фильм, если он содержит и 'аниме', и 'мультфильм', а пользователь выбрал только один из них.
+        Пропускает фильм, если он содержит одновременно 'аниме' и 'мультфильм',
+        но пользователь выбрал только 'мультфильм'.
         """
         if "аниме" in movie_genres and "мультфильм" in movie_genres:
-            return not ("аниме" in selected_genres and "мультфильм" in selected_genres)
+            return "аниме" not in selected_genres
         return False
 
     def recommend(self,
