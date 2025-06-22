@@ -65,7 +65,20 @@ class MovieWeaviateRecommender:
 
     @staticmethod
     def _dynamic_score(item: dict) -> float:
+        """
+        Вычисляет составной скор фильма на основе рейтингов, голосов, свежести, жанров и страны производства.
 
+        Алгоритм учитывает:
+        - логарифмическое количество голосов с IMDb и Кинопоиска;
+        - рейтинги IMDb и Кинопоиска;
+        - свежесть фильма (снижение за старые фильмы, максимум в 2025 году);
+        - штраф за фильмы, которые одновременно являются 'аниме';
+        - фильтрацию стендап-комедий (снижение до 0, если жанр 'комедия' и найден текст стендапа);
+        - бонус за страны: Франция, Германия, Южная Корея, Испания, Аргентина, Бразилия.
+
+        Возвращает:
+            Округлённый скор фильма (float). Фильмы с нулевым или отрицательным скором исключаются.
+        """
         rating_kp = item.get("rating_kp") or 0.0
         rating_imdb = item.get("rating_imdb") or 0.0
         votes_kp = item.get("votes_kp") or 0
@@ -88,7 +101,7 @@ class MovieWeaviateRecommender:
         freshness = max(0.0, 1.0 - (2025 - year) / 35)
         score += 1.0 * freshness
 
-        if any(g in genres for g in ["аниме", "мультфильм"]):
+        if any(g in genres for g in ["аниме"]):
             score *= 0.85
 
         if genres == ["комедия"] and any(word in content for word in ["стендап", "stand-up", "выступлен"]):
@@ -100,6 +113,24 @@ class MovieWeaviateRecommender:
         return round(score, 2)
 
     def search(self, query: str) -> List[MovieObject]:
+        """
+        Выполняет гибридный поиск фильмов в Weaviate по заданному текстовому запросу (query).
+
+        Алгоритм:
+        - Генерирует embedding из текста с помощью OpenAI.
+        - Выполняет hybrid-поиск по коллекции (комбинация embedding + keyword).
+        - Оценивает каждый результат с помощью `_dynamic_score`.
+        - Возвращает топ-10 фильмов с положительным скором, отсортированных по убыванию этого значения.
+
+        Параметры:
+            query (str): текстовый запрос пользователя (например, название желаемого фильма или ключевые слова).
+
+        Возвращает:
+            List[MovieObject]: список из до 10 подходящих фильмов.
+
+        Примечание:
+            Результаты фильтруются по смысловой релевантности и бизнес-логике через динамический скоринг.
+        """
         embedding = self.openai_client.embeddings.create(
             input=query,
             model=self.model_name
@@ -131,6 +162,14 @@ class MovieWeaviateRecommender:
             logger.warning(f"[MovieRAG] Ошибка запроса к Weaviate: {e}")
             return []
 
+    @staticmethod
+    def _skip_due_to_genre_conflict(movie_genres: List[str], selected_genres: List[str]) -> bool:
+        """
+        Пропускает фильм, если он содержит и 'аниме', и 'мультфильм', а пользователь выбрал только один из них.
+        """
+        if "аниме" in movie_genres and "мультфильм" in movie_genres:
+            return not ("аниме" in selected_genres and "мультфильм" in selected_genres)
+        return False
 
     def recommend(self,
                   query: str = None,
@@ -141,7 +180,28 @@ class MovieWeaviateRecommender:
                   rating_imdb: float = 0.0,
                   exclude_kp_ids: Optional[List[int]] = None
                   ) -> List[MovieObject]:
+        """
+        Выполняет векторный и/или фильтрационный поиск фильмов с учётом параметров пользователя и возвращает
+        отсортированный список рекомендаций по вычисленному скору.
 
+        Параметры:
+            query (str, optional): текстовый запрос для генерации эмбеддинга (если задан — используется гибридный поиск).
+            genres (List[str], optional): жанры, которые пользователь хочет видеть.
+            start_year (int): начальный год выпуска фильма.
+            end_year (int): конечный год выпуска фильма.
+            rating_kp (float): минимальный рейтинг Кинопоиска.
+            rating_imdb (float): минимальный рейтинг IMDb.
+            exclude_kp_ids (List[int], optional): список фильмов, которые нужно исключить (например, уже просмотренные).
+
+        Возвращает:
+            List[MovieObject]: список до 100 фильмов, отсортированных по убыванию dynamic_score.
+
+        Особенности:
+        - Если `query` задан, используется гибридный поиск (vector + keyword).
+        - Применяются фильтры по году, рейтингу, жанрам и исключённым фильмам.
+        - Исключаются фильмы, нарушающие конфликт жанров (например, одновременно "аниме" и "мультфильм", если только не запрошены оба).
+        - Каждый фильм получает оценку через `_dynamic_score`, и только положительные результаты возвращаются.
+        """
         filters = Filter.by_property("year").greater_than(start_year) & \
                   Filter.by_property("year").less_than(end_year) & \
                   Filter.by_property("rating_kp").greater_than(rating_kp) & \
@@ -182,9 +242,15 @@ class MovieWeaviateRecommender:
             exclude_set = set(exclude_kp_ids) if exclude_kp_ids else set()
 
             for obj in results.objects:
+
                 kp_id = obj.properties.get("kp_id")
                 if kp_id in exclude_set:
                     continue
+
+                if genres is not None:
+                    movie_genres = obj.properties.get("genres", [])
+                    if self._skip_due_to_genre_conflict(movie_genres, genres):
+                        continue
 
                 score = self._dynamic_score(obj.properties)
                 if score > 0:
@@ -209,6 +275,30 @@ class MovieWeaviateRecommender:
             rating_kp: float = 5.0,
             rating_imdb: float = 5.0,
     ):
+        """
+        Асинхронный генератор фильмов, отбираемых с учётом фильтров, истории пользователя и Weaviate/Кинопоиск.
+
+        Алгоритм:
+        - Если задан `movie_name`, выполняется поиск по названию (через `self.search`).
+        - Иначе используется метод `recommend`, исключая фильмы из пропущенных и избранных пользователя.
+        - Для каждого фильма:
+            - Пытается получить данные из базы (`MovieManager.get_by_kp_id`).
+            - Если нет — запрашивает у Kinopoisk API и сохраняет в базу.
+            - Возвращает сериализованный объект фильма (dict с `poster_url` и `movie_id`).
+
+        Параметры:
+            user_id (int): ID пользователя Telegram.
+            query (str, optional): Текстовый запрос (например, атмосфера или описание).
+            movie_name (str, optional): Точное имя фильма для поиска (приоритетный путь).
+            genres (List[str], optional): Список жанров фильмов.
+            start_year (int): Минимальный год выпуска.
+            end_year (int): Максимальный год выпуска.
+            rating_kp (float): Минимальный рейтинг на Кинопоиске.
+            rating_imdb (float): Минимальный рейтинг на IMDb.
+
+        Возвращает:
+            Асинхронный генератор объектов фильмов (dict), готовых к отправке в клиент.
+        """
         async with AsyncSessionFactory() as session:
             movie_manager = MovieManager(session)
 
