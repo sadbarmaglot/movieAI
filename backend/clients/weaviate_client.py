@@ -12,7 +12,8 @@ from fastapi import HTTPException
 from clients.kp_client import KinopoiskClient
 from db_managers import AsyncSessionFactory, MovieManager, FavoriteManager
 from settings import (
-    TOP_K,
+    TOP_K_HYBRID,
+    TOP_K_FETCH,
     TOP_K_SEARCH,
     WEAVITE_HOST_HTTP,
     WEAVITE_HOST_GRPC,
@@ -52,13 +53,15 @@ class MovieWeaviateRecommender:
                  kp_client: KinopoiskClient,
                  openai_client: OpenAI,
                  model_name=MODEL_EMBS,
-                 top_k=TOP_K,
+                 top_k_hybrid=TOP_K_HYBRID,
+                 top_k_fetch=TOP_K_FETCH,
                  top_k_search=TOP_K_SEARCH,
                  collection=CLASS_NAME
                  ):
         self.openai_client = openai_client
         self.kp_client = kp_client
-        self.top_k = top_k
+        self.top_k_hybrid = top_k_hybrid
+        self.top_k_fetch = top_k_fetch
         self.top_k_search = top_k_search
         self.model_name = model_name
         self.collection = weaviate_client.collections.get(collection)
@@ -181,26 +184,28 @@ class MovieWeaviateRecommender:
                   exclude_kp_ids: Optional[List[int]] = None
                   ) -> List[MovieObject]:
         """
-        Выполняет векторный и/или фильтрационный поиск фильмов с учётом параметров пользователя и возвращает
-        отсортированный список рекомендаций по вычисленному скору.
+        Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
+        с учётом жанров, годов, рейтингов и исключённых фильмов. Возвращает отсортированные результаты
+        по кастомному скору (_dynamic_score), с дополнительной фильтрацией по конфликту жанров.
 
         Параметры:
-            query (str, optional): текстовый запрос для генерации эмбеддинга (если задан — используется гибридный поиск).
-            genres (List[str], optional): жанры, которые пользователь хочет видеть.
-            start_year (int): начальный год выпуска фильма.
-            end_year (int): конечный год выпуска фильма.
-            rating_kp (float): минимальный рейтинг Кинопоиска.
-            rating_imdb (float): минимальный рейтинг IMDb.
-            exclude_kp_ids (List[int], optional): список фильмов, которые нужно исключить (например, уже просмотренные).
+            query (str, optional): текстовый запрос пользователя; при наличии используется гибридный поиск.
+            genres (List[str], optional): список жанров, которые интересуют пользователя.
+            start_year (int): нижняя граница года выпуска фильмов.
+            end_year (int): верхняя граница года выпуска фильмов.
+            rating_kp (float): минимальный рейтинг на Кинопоиске.
+            rating_imdb (float): минимальный рейтинг на IMDb.
+            exclude_kp_ids (List[int], optional): список фильмов (по kp_id), которые следует исключить из рекомендаций.
 
         Возвращает:
-            List[MovieObject]: список до 100 фильмов, отсортированных по убыванию dynamic_score.
+            List[MovieObject]: список до 100 фильмов, отсортированных по `dynamic_score` (по убыванию).
 
         Особенности:
-        - Если `query` задан, используется гибридный поиск (vector + keyword).
-        - Применяются фильтры по году, рейтингу, жанрам и исключённым фильмам.
-        - Исключаются фильмы, нарушающие конфликт жанров (например, одновременно "аниме" и "мультфильм", если только не запрошены оба).
-        - Каждый фильм получает оценку через `_dynamic_score`, и только положительные результаты возвращаются.
+        - Если `query` указан, используется гибридный поиск (по тексту + вектору); иначе — фильтрационный fetch.
+        - Применяются фильтры по году, рейтингу и жанрам на уровне Weaviate.
+        - Исключаются фильмы с конфликтом жанров ("аниме" + "мультфильм"), если пользователь не запросил оба.
+        - Применяется дополнительная Python-фильтрация по exclude_kp_ids.
+        - Каждому фильму присваивается кастомный score, учитывающий рейтинги, голоса, свежесть, жанры и страны.
         """
         filters = Filter.by_property("year").greater_than(start_year) & \
                   Filter.by_property("year").less_than(end_year) & \
@@ -221,7 +226,7 @@ class MovieWeaviateRecommender:
                     query=query,
                     vector=embedding,
                     alpha=0.7,
-                    limit=self.top_k,
+                    limit=self.top_k_hybrid,
                     filters=filters,
                     return_properties=[
                         "kp_id", "year", "genres", "countries",
@@ -231,7 +236,7 @@ class MovieWeaviateRecommender:
             else:
                 results = self.collection.query.fetch_objects(
                     filters=filters,
-                    limit=self.top_k,
+                    limit=self.top_k_fetch,
                     return_properties=[
                         "kp_id", "year", "genres", "countries",
                         "rating_kp", "rating_imdb", "votes_kp", "votes_imdb", "page_content"
