@@ -15,7 +15,6 @@ document.getElementById('movie-submit').addEventListener('click', async () => {
         sessionStorage.setItem('movieSearch', movieInput);
         sessionStorage.setItem('movieCategories', "[]");
         sessionStorage.setItem('movieAtmospheres', "[]");
-        sessionStorage.setItem('userAnswers', "");
         sessionStorage.setItem('movieSuggestion', "");
         sessionStorage.setItem('movieDescription', "");
         sessionStorage.setItem('yearStart', "");

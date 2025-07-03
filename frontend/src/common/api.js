@@ -1,5 +1,8 @@
-const API_BASE_URL = "https://auto-gens.com";
-const API_BASE_URL_WEBSOCKET = "wss://auto-gens.com";
+//const API_BASE_URL = "https://auto-gens.com";
+// const API_BASE_URL_WEBSOCKET = "wss://auto-gens.com";
+const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL_WEBSOCKET = "ws://localhost:8080";
+
 const apiKey = (
   typeof import.meta !== 'undefined' &&
   import.meta.env &&

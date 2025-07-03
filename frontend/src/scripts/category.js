@@ -102,9 +102,7 @@ nextStepButton.addEventListener("click", () => {
         sessionStorage.setItem('yearStart', years[0]);
         sessionStorage.setItem('yearEnd', years[1]);
         sessionStorage.setItem('movieDescription', "");
-        sessionStorage.setItem('movieSearch', "");
         sessionStorage.setItem('movieSuggestion', "");
-        sessionStorage.setItem('userAnswers', "");
         sessionStorage.setItem('movieSearch', "");
 
         window.location.href = 'matching.html';

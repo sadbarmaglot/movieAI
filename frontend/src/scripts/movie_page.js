@@ -96,12 +96,11 @@ document.getElementById('share-button').addEventListener('click', async () => {
 document.getElementById('suggestion-button').addEventListener('click', async () => {
     vibrateOnClick();
     void logEvent(userId, "suggest_similar", initData);
-    sessionStorage.setItem('movieSuggestion', movieData.title_alt);
+    sessionStorage.setItem('movieSuggestion', movieData.movie_id);
     sessionStorage.setItem('movieCategories', "[]");
     sessionStorage.setItem('movieAtmospheres', "[]");
     sessionStorage.setItem('movieDescription', "");
     sessionStorage.setItem('movieSearch', "");
-    sessionStorage.setItem('userAnswers', "");
     sessionStorage.setItem('yearStart', "");
     sessionStorage.setItem('yearEnd', "");
 
@@ -111,14 +110,6 @@ document.getElementById('suggestion-button').addEventListener('click', async () 
         tgBackButton.hide();
         }, 50
     );
-    // sessionStorage.setItem('movieData', JSON.stringify({
-    //    suggestion: movieData.title_alt,
-    //    category: "",
-    //    description: "",
-    //    search: "",
-    //    preferences: ""
-    // }));
-
 });
 
 async function initializeMoviePage() {

@@ -43,7 +43,6 @@ const storedData = [
     'movieDescription',
     'movieSuggestion',
     'movieSearch',
-    'userAnswers',
     'yearStart',
     'yearEnd'
 ].reduce((acc, key) => {
@@ -56,183 +55,172 @@ const hasCriteria =
     storedData["movieAtmospheres"] ||
     storedData["movieDescription"] ||
     storedData["movieSuggestion"] ||
-    storedData["movieSearch"] ||
-    storedData["userAnswers"];
+    storedData["movieSearch"]
 
 const isSearchMode = Boolean(storedData["movieSearch"]);
 
-const yearStart = parseInt(storedData["yearStart"]) || null;
-const yearEnd = parseInt(storedData["yearEnd"]) || null;
-
-let userAnswers
-try {
-    userAnswers = JSON.parse(storedData["userAnswers"] || "[]");
-    if (!Array.isArray(userAnswers)) userAnswers = [];
-} catch {
-    userAnswers = [];
-}
+const yearStart = parseInt(storedData["yearStart"]) || 1900;
+const yearEnd = parseInt(storedData["yearEnd"]) || 2025;
+const sourceMovie = parseInt(storedData["movieSuggestion"]) || null;
+const query = storedData["movieDescription"] || null;
 
 let favoriteMovies = [];
 let excludedMovies = [];
 let movieQueue = []
 let currentMovie = null
-let isTransitionInProgress = false;
-let isFetching = false;
-let hasSession = localStorage.getItem("currentMovie");
-let endOfMatching = false;
+
+const MatchingPhase = {
+    IDLE: 'idle',
+    STREAMING: 'streaming',
+    TRANSITION: 'transition',
+    WAITING_USER: 'waiting_user',
+    DONE: 'done',
+    ERROR: 'error'
+};
+
+let currentPhase = MatchingPhase.IDLE;
+
+function setPhase(phase) {
+    currentPhase = phase;
+    console.log(`📦 [Phase] -> ${phase}`);
+}
+
+function is(phase) {
+    return currentPhase === phase;
+}
+
 let pendingAutoShow = false;
-let isStreaming = false;
+let hasSession = localStorage.getItem("currentMovie");
+
+function tryAutoShowIfPossible(retry = true) {
+    if (pendingAutoShow && movieQueue.length > 0) {
+        if (!is(MatchingPhase.TRANSITION)) {
+            pendingAutoShow = false;
+            console.log("🚀 Показываем отложенный фильм из tryAutoShowIfPossible");
+            showNextMovieUnified();
+        } else if (retry) {
+            console.log("⏳ Ждём завершения transition (retry=true), проверим позже");
+            setTimeout(() => tryAutoShowIfPossible(true), 200);
+        }
+    }
+}
 
 async function fetchStreamingResponse() {
-    if (isStreaming) return;
-    isStreaming = true;
+    if (is(MatchingPhase.STREAMING)) return;
+
+    setPhase(MatchingPhase.STREAMING);
     let firstMovieFromThisBatchShown = false;
 
     function isInRangeInclusive(num, a, b) {
         if (a === null || b === null) return true;
         return num >= a && num <= b;
     }
+
     function handleNewMovie(movie) {
         console.log("🎥 Получен фильм:", movie.title_alt);
-        console.log("📦 handleNewMovie → isTransitionInProgress:", isTransitionInProgress);
-        if (
-            movie.title_alt &&
-            movie.year &&
-            !excludedMovies.includes(movie.title_alt)  &&
-            !favoriteMovies.some(fav => fav.movie_id === movie.movie_id) &&
-            isInRangeInclusive(movie.year, yearStart, yearEnd))
-        {
-            movieQueue.push(movie);
-            hideLoader();
+        const alreadyShown = movieQueue.some(m => m.movie_id === movie.movie_id);
+        const isValid = !excludedMovies.includes(movie.movie_id) &&
+                        !favoriteMovies.some(f => f.movie_id === movie.movie_id) &&
+                        isInRangeInclusive(movie.year, yearStart, yearEnd) &&
+                        !alreadyShown;
 
-            if (!firstMovieFromThisBatchShown) {
-                if (!isTransitionInProgress && !pendingAutoShow) {
-                    firstMovieFromThisBatchShown = true;
-                    console.log("✅ Показываем фильм из handleNewMovie");
-                    showNextMovieUnified();
-                    hideLoader();
-                } else {
-                    console.log("⏳ Автопоказ отложен — transition в процессе");
-                    pendingAutoShow = true;
-                }
+        if (!isValid) return;
+
+        movieQueue.push(movie);
+        hideLoader();
+
+        if (!firstMovieFromThisBatchShown) {
+            if (!is(MatchingPhase.TRANSITION)) {
+                firstMovieFromThisBatchShown = true;
+                pendingAutoShow = false;
+                console.log("✅ Показываем фильм из handleNewMovie");
+                showNextMovieUnified();
+            } else {
+                console.log("⏳ Автопоказ отложен — transition в процессе");
+                pendingAutoShow = true;
+                tryAutoShowIfPossible(true);
             }
+        }
+
+        if (pendingAutoShow && movieQueue.length > 0 && !is(MatchingPhase.TRANSITION)) {
+            tryAutoShowIfPossible(true);
         }
     }
 
     function handleStreamComplete() {
-        isStreaming = false;
-        const didAddNewMovies = movieQueue.length > 0;
-        console.log("🎬 handleStreamComplete → pendingAutoShow:", pendingAutoShow, "movieQueue.length:", movieQueue.length);
+        const addedMovies = movieQueue.length > 0;
 
-        if (!didAddNewMovies) {
-            endOfMatching = true;
+        if (!addedMovies) {
+            setPhase(MatchingPhase.DONE);
             hideLoader();
             alert("Фильмы закончились. Попробуйте задать другой запрос.");
             clearOldSession();
             clearCurentSession();
-            if (storedData["movieSuggestion"]) {
-                window.location.href = "favorites.html";
-            } else if (storedData["movieCategories"]) {
-                window.location.href = "category.html";
-            } else {
-                window.location.href = "chat.html";
-            }
+            window.location.href = storedData["movieSuggestion"]
+                ? "favorites.html"
+                : storedData["movieCategories"]
+                ? "category.html"
+                : "chat.html";
             return;
         }
-        console.log("✅ Стрим завершён, фильмы добавлены, ждём взаимодействия пользователя");
-        hideLoader();
 
-        if (pendingAutoShow && movieQueue.length > 0) {
-            const tryAutoShow = () => {
-                if (!isTransitionInProgress) {
-                    pendingAutoShow = false;
-                    console.log("🚀 Показываем отложенный фильм из handleStreamComplete (таймер)");
-                    showNextMovieUnified();
-                } else {
-                    console.log("⏳ Ждём завершения transition (таймер), проверим позже");
-                    setTimeout(tryAutoShow, 200);
-                }
-            };
-            tryAutoShow();
-            //pendingAutoShow = false;
-            //console.log("🚀 Показываем отложенный фильм из handleStreamComplete");
-            //showNextMovieUnified();
-        }
+        setPhase(MatchingPhase.WAITING_USER);
+        hideLoader();
+        tryAutoShowIfPossible(true);
     }
 
     function handleStreamError(error) {
-        isStreaming = false;
-        console.error("Ошибка при загрузке фильмов:", error);
+        setPhase(MatchingPhase.ERROR);
+        console.error("❌ Ошибка стрима:", error);
+
         hideLoader();
 
-        const status = error?.status;
-        const detail = error?.detail || error?.message || error?.toString() || "Неизвестная ошибка";
-        const lowerDetail = detail.toLowerCase();
+        const detail = (error?.detail || error?.message || error?.toString() || "").toLowerCase();
+        const ignored = ["network error", "failed to fetch", "aborted", "quic", "load failed"];
 
-        const ignoredErrors = [
-            "network error",
-            "Failed to fetch",
-            "The user aborted a request",
-            "ERR_QUIC_PROTOCOL_ERROR",
-            "Load Failed"
-        ];
-
-        if (ignoredErrors.some(msg => lowerDetail.includes(msg))) {
+        if (ignored.some(msg => detail.includes(msg))) {
             console.warn("⚠️ Сетевая ошибка проигнорирована:", detail);
             return;
         }
 
-        if (status === 403 && lowerDetail.includes("звёзд")) {
+        if (error?.status === 403 && detail.includes("звёзд")) {
             showNoStarsModal();
-            return;
         }
     }
 
-    const useLegacyEndpoint =
-        userAnswers.length > 0 ||
-        Boolean(storedData["movieDescription"]) ||
-        Boolean(storedData["movieSuggestion"]);
+    const body = {
+        user_id: userId,
+        action: query ? "movie_agent_streaming" : sourceMovie ? "similar_movie_streaming" : "movie_wv_streaming",
+        source_kp_id: sourceMovie,
+        movie_name: storedData["movieSearch"],
+        query: query,
+        genres: JSON.parse(storedData["movieCategories"] || "[]"),
+        atmospheres: JSON.parse(storedData["movieAtmospheres"] || "[]"),
+        start_year: yearStart,
+        end_year: yearEnd
+    };
 
-    if (useLegacyEndpoint) {
-        const requestBody = {
-            user_id: userId,
-            chat_answers: userAnswers,
-            genres: JSON.parse(storedData["movieCategories"] || "[]"),
-            atmospheres: JSON.parse(storedData["movieAtmospheres"] || "[]"),
-            description: storedData["movieDescription"],
-            suggestion: storedData["movieSuggestion"],
-            movie_name: storedData["movieSearch"],
-            start_year: yearStart,
-            end_year: yearEnd,
-            exclude: Array.from(excludedMovies),
-            favorites: favoriteMovies.map(movie => movie.title_alt)
-        };
+    await apiWebSocketStream(
+        "/movie_streaming-ws",
+        body,
+        handleNewMovie,
+        handleStreamComplete,
+        handleStreamError,
+        initData
+    );
+}
 
-        await apiPostStream(
-            "/movies-streaming",
-            requestBody,
-            handleNewMovie,
-            handleStreamComplete,
-            handleStreamError,
-            initData
-        );
-    } else {
-        const requestBody = {
-            user_id: userId,
-            genres: JSON.parse(storedData["movieCategories"] || "[]"),
-            atmospheres: JSON.parse(storedData["movieAtmospheres"] || "[]"),
-            movie_name: storedData["movieSearch"],
-            start_year: yearStart,
-            end_year: yearEnd,
-        };
-        await apiWebSocketStream(
-            "/weaviate-streaming",
-            requestBody,
-            handleNewMovie,
-            handleStreamComplete,
-            handleStreamError,
-            initData
-            );
+function handleAutoShowAfterUserAction() {
+    if (movieQueue.length === 0) {
+        pendingAutoShow = true;
+
+        if (is(MatchingPhase.STREAMING)) {
+            showLoader();
+            console.log("🔄 Ожидаем фильм из стрима (handleAutoShowAfterUserAction)");
+        } else {
+            console.log("🎯 Стрим не идёт — запускаем его (handleAutoShowAfterUserAction)");
+            void waitForNewMovies();
+        }
     }
 }
 
@@ -242,13 +230,6 @@ function updateMovieInfo(card, movie) {
     updateMovieGenres(card, movie);
     updateKinopoiskLink(card, movie);
     updateGlobalMovieTitles(movie);
-}
-
-let transitionLock = Promise.resolve();
-
-async function showNextMovieUnified() {
-    transitionLock = transitionLock.then(() => _showNextMovieUnified());
-    await transitionLock;
 }
 
 function preloadNextPoster() {
@@ -263,204 +244,204 @@ function preloadNextPoster() {
     img.src = url;
 }
 
-async function _showNextMovieUnified() {
-    console.log("🔁 [showNextMovieUnified] Старт, очередь:", movieQueue.length, "transition:", isTransitionInProgress);
-    if (isTransitionInProgress) return;
-    isTransitionInProgress = true;
+let transitionLock = Promise.resolve();
 
-    try {
-        console.log("🔁 START transition. Очередь:", movieQueue.length);
-
-        if (movieQueue.length === 0) {
-            console.log("🛑 Нет фильмов в очереди, переходим к загрузке");
-
-            isTransitionInProgress = false;
-            if (isSearchMode) {
-                alert("Фильмы закончились. Попробуйте задать другой запрос.");
-                window.location.href = "search.html";
-            } else {
-                await waitForNewMovies();
-            }
+function showNextMovieUnified() {
+    transitionLock = transitionLock.then(async () => {
+        if (is(MatchingPhase.TRANSITION)) {
+            console.log("⏸ Переход уже в процессе — игнорируем вызов");
             return;
         }
 
-        currentMovie = movieQueue.shift();
-        console.log(`--> Вызываем showNextMovieUnified() | Очередь: ${movieQueue.length}, Текущий фильм:`, currentMovie.title_alt);
+        setPhase(MatchingPhase.TRANSITION);
 
-        const movieContainer = document.getElementById('movie-container');
-        if (movieContainer.style.display === 'none') {
-            movieContainer.style.display = 'flex';
+        try {
+            await _showNextMovieUnified();
+        } catch (e) {
+            console.error("❌ Ошибка в showNextMovieUnified:", e);
+            setPhase(MatchingPhase.ERROR);
         }
 
-        const oldCard = movieContainer.querySelector('.movie-card');
-        const newCard = createMovieCard(currentMovie);
+        setPhase(MatchingPhase.WAITING_USER);
 
-        newCard.querySelector('.card-inner')?.addEventListener('click', vibrateOnClick);
-
-        newCard.style.opacity = '0';
-        movieContainer.insertBefore(newCard, movieContainer.firstChild);
-        updateMovieInfo(newCard, currentMovie);
-        document.getElementById('movie-container').setAttribute("style", `background: ${currentMovie.background_color} !important;`);
-
-        attachCardEvents(newCard, currentMovie, {
-            onLike: async (movie) => {
-                void logEvent(userId, "like", initData);
-                favoriteMovies = await addToFavorites(userId, movie, favoriteMovies, initData);
-                const favBtn = document.getElementById('favorite-button');
-                favBtn.classList.add('pulse');
-                setTimeout(() => favBtn.classList.remove('pulse'), 200);
-
-                if (movieQueue.length === 0) {
-                    console.log("⏳ Очередь пуста после лайка — ставим pendingAutoShow");
-                    pendingAutoShow = true;
-
-                    if (!isStreaming) {
-                        console.log("🎯 Запускаем ожидание новых фильмов после добавления в избранное");
-                        waitForNewMovies();
-                    }
-                }
-            },
-            onSkip: async (movie) => {
-                void logEvent(userId, "skip", initData);
-                if (!isSearchMode) {
-                    excludedMovies.push(movie.title_alt);
-                    await addToSkipped(userId, movie, initData);
-                }
-                const skipBtn = document.getElementById('skip-button');
-                skipBtn.classList.add('pulse');
-                setTimeout(() => skipBtn.classList.remove('pulse'), 200);
-
-                if (movieQueue.length === 0) {
-                    console.log("⏳ Очередь пуста после скипа — ставим pendingAutoShow");
-                    pendingAutoShow = true;
-
-                    if (!isStreaming) {
-                        console.log("🎯 Запускаем ожидание новых фильмов после скипа");
-                        waitForNewMovies();
-                    }
-                }
-            },
-            onTransitionRequest: showNextMovieUnified
-        });
-
-        if (oldCard) movieContainer.removeChild(oldCard);
-
-        const img = newCard.querySelector('#movie-poster');
-
-        img.loading = 'eager';
-        img.decoding = 'sync';
-
-        img.src = currentMovie.poster_url || DEFAULT_POSTER;
-
-        const posterReady = new Promise(resolve => {
-            if (img.complete) resolve();
-            img.onload = resolve;
-                img.onerror = () => {
-                    img.src = DEFAULT_POSTER;
-                    resolve();
-                };
-        });
-
-        const transitionDone = new Promise(resolve => {
-            if (oldCard && (oldCard.classList.contains('fly-left') || oldCard.classList.contains('fly-right'))) {
-                oldCard.addEventListener('transitionend', () => {
-                });
-                let done = false;
-
-                const onTransitionEnd = () => {
-                    if (!done) {
-                        done = true;
-                        oldCard.remove();
-                        resolve();
-                    }
-                };
-
-                const timeout = setTimeout(onTransitionEnd, 200);
-
-                oldCard.addEventListener('transitionend', () => {
-                    clearTimeout(timeout);
-                    onTransitionEnd();
-                }, {once: true});
-            } else {
-                if (oldCard) oldCard.remove();
-                resolve();
-            }
-        });
-        console.log("⏳ Ожидаем posterReady + transitionDone...");
-        await Promise.all([posterReady, transitionDone]);
-        console.log("✅ Постер загружен и transition завершён");
-        newCard.classList.add('animate-in');
-        newCard.style.opacity = '1';
-        preloadNextPoster();
-
-    } catch (e) {
-        console.error("Ошибка в transition или posterReady:", e);
-    } finally {
-        isTransitionInProgress = false;
-
-        if (pendingAutoShow && movieQueue.length > 0 && !isTransitionInProgress) {
-            console.log("⏸ Ждём действия пользователя, pendingAutoShow останется true");
+        if (pendingAutoShow && movieQueue.length > 0 && is(MatchingPhase.WAITING_USER)) {
+            console.log("🔁 Отложенный автошоу — вызываем showNextMovieUnified снова");
+            tryAutoShowIfPossible();
         }
-    }
+    });
+
+    return transitionLock;
 }
 
-async function fetchNextBatch() {
-    if (movieQueue.length > 0 || isFetching) return;
+async function _showNextMovieUnified() {
+    console.log("🔁 [showNextMovieUnified] Старт, очередь:", movieQueue.length);
 
-    console.log("Запрашиваем новую пачку фильмов...");
-    showLoader();
-    isFetching = true;
+    if (movieQueue.length === 0) {
+        console.log("🛑 Нет фильмов в очереди");
 
-    try {
-        await fetchStreamingResponse();
-    } catch (err) {
-        console.error("Ошибка при загрузке фильмов:", err);
-        hideLoader();
-    } finally {
-        isFetching = false;
-    }
-}
+        if (isSearchMode) {
+            alert("Фильмы закончились. Попробуйте задать другой запрос.");
+            window.location.href = "search.html";
+        } else {
+            await waitForNewMovies();
+        }
 
-async function waitForNewMovies(retryCount = 0) {
-    if (movieQueue.length > 0 && !isTransitionInProgress) {
-        console.log("Фильмы найдены, показываем следующий");
-        showNextMovieUnified();
         return;
     }
 
-    if (retryCount < 1) {
-        console.log("Пробуем снова через 1 секунду (retryCount = %d)", retryCount);
-        showLoader();
-        setTimeout(async () => {await waitForNewMovies(retryCount + 1);}, 1000);
-    } else {
-        if (!isStreaming) {
-            await fetchNextBatch();
+    currentMovie = movieQueue.shift();
+    console.log(`🎬 Показываем: ${currentMovie.title_alt}`);
+
+    const movieContainer = document.getElementById('movie-container');
+    if (movieContainer.style.display === 'none') {
+        movieContainer.style.display = 'flex';
+    }
+
+    const oldCard = movieContainer.querySelector('.movie-card');
+    const newCard = createMovieCard(currentMovie);
+
+    newCard.querySelector('.card-inner')?.addEventListener('click', vibrateOnClick);
+    newCard.style.opacity = '0';
+
+    movieContainer.insertBefore(newCard, movieContainer.firstChild);
+
+    updateMovieInfo(newCard, currentMovie);
+    document.getElementById('movie-container').setAttribute("style", `background: ${currentMovie.background_color} !important;`);
+
+    attachCardEvents(newCard, currentMovie, {
+        onLike: async (movie) => {
+            void logEvent(userId, "like", initData);
+
+            favoriteMovies = await addToFavorites(userId, movie, favoriteMovies, initData);
+
+            const favBtn = document.getElementById('favorite-button');
+            favBtn.classList.add('pulse');
+            setTimeout(() => favBtn.classList.remove('pulse'), 200);
+
+            if (movieQueue.length === 0) {
+                pendingAutoShow = true;
+                if (!is(MatchingPhase.STREAMING)) {
+                    waitForNewMovies();
+                }
+            }
+        },
+        onSkip: async (movie) => {
+            void logEvent(userId, "skip", initData);
+
+            if (!isSearchMode) {
+                excludedMovies.push(movie.movie_id);
+                await addToSkipped(userId, movie, initData);
+            }
+
+            const skipBtn = document.getElementById('skip-button');
+            skipBtn.classList.add('pulse');
+            setTimeout(() => skipBtn.classList.remove('pulse'), 200);
+
+            if (movieQueue.length === 0) {
+                pendingAutoShow = true;
+                if (!is(MatchingPhase.STREAMING)) {
+                    waitForNewMovies();
+                }
+            }
+        },
+        onTransitionRequest: showNextMovieUnified
+    });
+
+    if (oldCard) movieContainer.removeChild(oldCard);
+
+    const img = newCard.querySelector('#movie-poster');
+    img.loading = 'eager';
+    img.decoding = 'sync';
+    img.src = currentMovie.poster_url || DEFAULT_POSTER;
+
+    const posterReady = new Promise(resolve => {
+        if (img.complete) resolve();
+        img.onload = resolve;
+            img.onerror = () => {
+                img.src = DEFAULT_POSTER;
+                resolve();
+            };
+    });
+
+    const transitionDone = new Promise(resolve => {
+        if (oldCard && (oldCard.classList.contains('fly-left') || oldCard.classList.contains('fly-right'))) {
+            // oldCard.addEventListener('transitionend', () => {
+            // });
+            let done = false;
+
+            const onTransitionEnd = () => {
+                if (!done) {
+                    done = true;
+                    oldCard.remove();
+                    resolve();
+                }
+            };
+
+            const timeout = setTimeout(onTransitionEnd, 200);
+
+            oldCard.addEventListener('transitionend', () => {
+                clearTimeout(timeout);
+                onTransitionEnd();
+            }, {once: true});
+
         } else {
-            setTimeout(() => waitForNewMovies(retryCount + 1), 1000);
+            if (oldCard) oldCard.remove();
+            resolve();
         }
+    });
+
+    console.log("⏳ Ожидаем загрузку постера и завершение transition");
+    await Promise.all([posterReady, transitionDone]);
+
+    newCard.classList.add('animate-in');
+    newCard.style.opacity = '1';
+    preloadNextPoster();
+}
+
+async function waitForNewMovies() {
+    if (movieQueue.length > 0 || is(MatchingPhase.TRANSITION)) {
+        return;
+    }
+
+    showLoader();
+
+    if (!is(MatchingPhase.STREAMING)) {
+        console.log("📭 Очередь пуста и стрим не идёт — запускаем fetchStreamingResponse");
+        await fetchStreamingResponse();
+    } else {
+        console.log("⚙️ Стрим уже идёт, ждём завершения");
+        pendingAutoShow = true;
     }
 }
 
 document.getElementById('favorite-button').addEventListener('click', async () => {
     vibrateOnClick();
     void logEvent(userId, "like_button", initData);
+
     favoriteMovies = await addToFavorites(userId, currentMovie, favoriteMovies, initData);
+
     if (pendingAutoShow) {
         pendingAutoShow = false;
     }
+
+    handleAutoShowAfterUserAction();
     showNextMovieUnified();
 });
 
 document.getElementById('skip-button').addEventListener('click', async() => {
     vibrateOnClick();
     void logEvent(userId, "skip_button", initData);
+
     if (!isSearchMode) {
-        excludedMovies.push(currentMovie.title_alt);
+        excludedMovies.push(currentMovie.movie_id);
         await addToSkipped(userId, currentMovie, initData);
     }
+
     if (pendingAutoShow) {
         pendingAutoShow = false;
     }
+
+    handleAutoShowAfterUserAction();
     showNextMovieUnified();
 });
 
@@ -479,7 +460,7 @@ window.addEventListener('beforeunload', () => {
         favoriteMovies,
         storedData,
         hasCriteria,
-        endOfMatching
+        endOfMatching: is(MatchingPhase.DONE)
     });
 });
 
@@ -491,7 +472,7 @@ window.addEventListener('pagehide', () => {
         favoriteMovies,
         storedData,
         hasCriteria,
-        endOfMatching
+        endOfMatching: is(MatchingPhase.DONE)
     });
 });
 
@@ -513,7 +494,6 @@ async function initializeMatching() {
 
     if (!hasSession && !hasCriteria) {
         alert("Упс, нет фильмов для подбора, попробуй сформировать запрос")
-        console.warn("🚫 Нет данных для подбора — редиректим на ввод критериев");
         window.location.href = "index.html";
         return;
     }
@@ -524,15 +504,23 @@ async function initializeMatching() {
         showLoader();
         fetchFavorites(userId, initData).then(result => {
             favoriteMovies = result;
-            isTransitionInProgress = false;
+            setPhase(MatchingPhase.IDLE);
             fetchStreamingResponse();
         });
     } else {
         if (currentMovie) {
             console.log("🔄 Восстановлен фильм из сессии:", currentMovie.title_alt);
-            showCurrentMovieFromSession(currentMovie);
+
+            if (movieQueue.length === 0 && !is(MatchingPhase.STREAMING)) {
+                console.log("🟢 Очередь пуста после восстановления — вызываем waitForNewMovies()");
+                showLoader();
+                await waitForNewMovies();
+                tryAutoShowIfPossible();
+            } else {
+                showCurrentMovieFromSession(currentMovie);
+            }
         } else {
-            console.warn("⚠️ currentMovie не найден в сохранённой сессии, показываем следующий");
+            console.warn("⚠️ currentMovie не найден в сессии — покажем следующий");
             showNextMovieUnified();
         }
     }
@@ -562,29 +550,25 @@ async function showCurrentMovieFromSession(movie) {
             onLike: async (movie) => {
                 void logEvent(userId, "like", initData);
                 favoriteMovies = await addToFavorites(userId, movie, favoriteMovies, initData);
+
                 const favBtn = document.getElementById('favorite-button');
                 favBtn.classList.add('pulse');
                 setTimeout(() => favBtn.classList.remove('pulse'), 200);
 
-                if (movieQueue.length === 0) {
-                    console.log("⏳ Очередь пуста после лайка — ставим pendingAutoShow");
-                    pendingAutoShow = true;
-                }
+                handleAutoShowAfterUserAction();
             },
             onSkip: async (movie) => {
                 void logEvent(userId, "skip", initData);
                 if (!isSearchMode) {
-                    excludedMovies.push(movie.title_alt);
+                    excludedMovies.push(movie.movie_id);
                     await addToSkipped(userId, movie, initData);
                 }
+
                 const skipBtn = document.getElementById('skip-button');
                 skipBtn.classList.add('pulse');
                 setTimeout(() => skipBtn.classList.remove('pulse'), 200);
 
-                if (movieQueue.length === 0) {
-                    console.log("⏳ Очередь пуста после скипа — ставим pendingAutoShow");
-                    pendingAutoShow = true;
-                }
+                handleAutoShowAfterUserAction();
             },
             onTransitionRequest: showNextMovieUnified
         });
@@ -620,14 +604,16 @@ function showNoStarsModal() {
     const modal = document.getElementById("no-stars-modal");
     modal.classList.remove("hidden");
 
+    setPhase(MatchingPhase.IDLE);
+
     async function waitForStarsAfterPayment(retryLimit = 20, interval = 1500) {
         for (let i = 0; i < retryLimit; i++) {
             try {
                 const response = await apiPost("/user-init", { user_id: userId }, initData);
                 if (response.balance && response.balance > 0) {
                     document.getElementById("no-stars-modal").classList.add("hidden");
-                    endOfMatching = false;
-                    await fetchNextBatch();
+                    setPhase(MatchingPhase.IDLE);
+                    await waitForNewMovies();
                     return;
                 }
             } catch (e) {

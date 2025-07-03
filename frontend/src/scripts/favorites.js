@@ -162,7 +162,7 @@ function createMovieCard(movie) {
     <div class="actions">
         <div class="action-row">
             <div class="action-button">
-                <button class="suggestion-button" data-movie-title="${movie.title_alt}">
+                <button class="suggestion-button" data-movie-id="${movie.movie_id}">
                     <img src="./assets/icons/suggestion_button.webp" alt="Совет">
                 </button>
                 <span class="button-label">Похожие</span>
@@ -384,16 +384,16 @@ function setupMovieActions() {
 
         if (suggestionBtn) {
             vibrateOnClick();
-            const movieTitle = suggestionBtn.getAttribute('data-movie-title');
+            const movieId = suggestionBtn.getAttribute('data-movie-id');
             void logEvent(userId, "find_similar", initData);
-            sessionStorage.setItem('movieSuggestion', movieTitle);
+            sessionStorage.setItem('movieSuggestion', movieId);
             sessionStorage.setItem('movieCategories', "[]");
             sessionStorage.setItem('movieAtmospheres', "[]");
             sessionStorage.setItem('movieDescription', "");
             sessionStorage.setItem('movieSearch', "");
-            sessionStorage.setItem('userAnswers', "");
             sessionStorage.setItem('yearStart', "");
             sessionStorage.setItem('yearEnd', "");
+
             window.location.href = 'matching.html';
         }
     });
