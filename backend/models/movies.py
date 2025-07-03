@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, TypedDict
 
 
 class ChatQA(BaseModel):
@@ -89,6 +89,17 @@ class MovieResponse(BaseModel):
             background_color=movie.background_color,
         )
 
+
 class AddSkippedRequest(BaseModel):
     user_id: int
     movie_id: int
+
+
+class MovieObject(TypedDict):
+    kp_id: int
+    title_ru: str
+    year: int
+    genres: Optional[List[str]]
+    rating_kp: float
+    rating_imdb: float
+    page_content: str

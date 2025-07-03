@@ -11,7 +11,9 @@ from middlewares import (
     LoggingMiddleware,
 )
 from clients.weaviate_client  import MovieWeaviateRecommender, load_vectorstore_weaviate
+
 from clients.client_factory import kp_client
+from clients.movie_agent import MovieAgent
 from openapi_config import custom_openapi
 from routers import health, favorites, movies, users
 from settings import ALLOW_ORIGINS
@@ -33,8 +35,11 @@ async def lifespan(app: FastAPI):
         openai_client=openai_client,
         kp_client=kp_client
     )
+    logger.info("✅ MovieWeaviateRecommender initialized with Weaviate.")
+
     app.state.recommender = recommender
-    logger.info("✅ MovieRAGRecommender initialized with Weaviate.")
+    app.state.openai_client = openai_client
+
     yield
 
 

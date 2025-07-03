@@ -1,19 +1,31 @@
 import re
 import json
-import asyncio
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Request, HTTPException, status
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import (
+    APIRouter,
+    WebSocket,
+    WebSocketDisconnect,
+    Depends, Request,
+    HTTPException,
+    status
+)
+from fastapi.websockets import WebSocketState
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List
+from typing import Optional, List, Callable, Awaitable, TypedDict, Any
 
-from clients import kp_client, openai_client
+
+from clients import (
+    kp_client,
+    openai_client_base,
+    openai_client,
+)
 from clients.weaviate_client import MovieWeaviateRecommender
+from clients.movie_agent import MovieAgent
 from db_managers import MovieManager
 from models import (
-    MovieDetails,
     MovieResponse,
     MovieStreamingRequest,
     QuestionStreamingRequest,
@@ -37,55 +49,6 @@ async def search_movies(
     await movie_manager.insert_movies(response)
     return [MovieResponse.from_details(m) for m in response]
 
-@router.get("/weaviate-search-movies", response_model=List[MovieResponse])
-async def search_movies(
-    request: Request,
-    movie_name: str
-):
-    recommender: MovieWeaviateRecommender = request.app.state.recommender
-
-    results = recommender.search(query=movie_name)
-    kp_ids = [r["kp_id"] for r in results]
-
-    async def get_or_fetch_movie(kp_id: int) -> Optional[MovieDetails]:
-        session = request.state.session_factory()
-        movie_manager = MovieManager(session)
-        try:
-            movie = await movie_manager.get_by_kp_id(kp_id)
-            return MovieDetails(
-                kp_id=movie.movie_id,
-                title_alt=movie.title_alt,
-                title_ru=movie.title_ru,
-                overview=movie.overview,
-                poster_url=movie.poster_url,
-                year=movie.year,
-                rating_kp=movie.rating_kp,
-                rating_imdb=movie.rating_imdb,
-                movie_length=movie.movie_length,
-                genres=movie.genres,
-                countries=movie.countries,
-                google_cloud_url=movie.poster_url,
-                background_color=movie.background_color,
-            )
-        except HTTPException:
-            return await kp_client.get_by_kp_id(kp_id)
-        finally:
-            await session.close()
-
-    movies: List[Optional[MovieDetails]] = await asyncio.gather(
-        *(get_or_fetch_movie(kp_id) for kp_id in kp_ids)
-    )
-
-    movies = [m for m in movies if m is not None]
-
-    session = request.state.session_factory()
-    try:
-        movie_manager = MovieManager(session)
-        await movie_manager.insert_movies(movies)
-    finally:
-        await session.close()
-
-    return [MovieResponse.from_details(m) for m in movies]
 
 @router.post("/questions-streaming")
 async def questions_streaming(
@@ -147,54 +110,198 @@ async def preview_movie(
     })
 
 
-@router.websocket("/weaviate-streaming")
-async def weaviate_streaming_ws(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        data = await websocket.receive_json()
-        user_id = data["user_id"]
-        start_year = data.get("start_year", 1900)
-        end_year = data.get("end_year", 2025)
-        rating_kp = data.get("rating_kp", 5.0)
-        rating_imdb = data.get("rating_imdb", 5.0)
-        movie_name = data.get("movie_name") or None
-
-        genres = data.get("genres")
-        if genres and "любой" in genres:
-            genres = None
-
-        atmospheres = data.get("atmospheres")
-        if atmospheres and "любой" in atmospheres:
-            query = None
-        else:
-            query = ",".join([ATMOSPHERE_MAPPING[a] for a in atmospheres]) if atmospheres else None
-
-        recommender: MovieWeaviateRecommender = websocket.app.state.recommender
-
-        async for movie in recommender.movie_generator(
-                user_id=user_id,
-                query=query,
-                movie_name=movie_name,
-                genres=genres,
-                start_year=start_year,
-                end_year=end_year,
-                rating_kp=rating_kp,
-                rating_imdb=rating_imdb
-        ):
-            await websocket.send_text(json.dumps(movie, ensure_ascii=False))
-
-        await websocket.send_text("__END__")
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket отключился")
-    except Exception as e:
-        logger.error(f"Ошибка в WebSocket: {e}")
-        await websocket.send_text("__ERROR__")
-
-
 @router.post("/add-skipped")
-async def add_favorite_movie(
+async def add_skipped_movie(
     body: AddSkippedRequest,
     movie_manager: MovieManager = Depends(get_movie_manager)
 ):
     await movie_manager.add_skipped_movies(user_id=body.user_id, kp_id=body.movie_id)
+
+
+async def _process_agent_results(
+    websocket: WebSocket,
+    agent: MovieAgent,
+    user_input: str,
+    add_user_message: bool,
+    last_tool_call_id_ref: dict
+):
+    async for result in agent.run_qa(user_input=user_input, add_user_message=add_user_message):
+        if websocket.application_state != WebSocketState.CONNECTED:
+            break
+        await websocket.send_json(result)
+
+        if result["type"] == "question":
+            last_tool_call_id_ref["id"] = result["tool_call_id"]
+        elif result["type"] == "search":
+            await websocket.send_json({"type": "done"})
+            await websocket.close()
+            return
+
+
+@router.websocket("/movie-agent-qa")
+async def movie_agent_qa_ws(websocket: WebSocket):
+    await websocket.accept()
+
+    agent = MovieAgent(
+        openai_client=openai_client_base,
+        kp_client=kp_client,
+        recommender=websocket.app.state.recommender
+    )
+    last_tool_call_id_ref: dict[str, Optional[str]] = {"id": None}
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+
+            if "query" in data:
+                last_tool_call_id_ref["id"] = None
+                await _process_agent_results(
+                    websocket=websocket,
+                    agent=agent,
+                    user_input=data["query"],
+                    add_user_message=True,
+                    last_tool_call_id_ref=last_tool_call_id_ref
+                )
+            elif "answer" in data:
+                if last_tool_call_id_ref["id"]:
+                    await agent.answer_tool_call(
+                        tool_call_id=last_tool_call_id_ref["id"],
+                        answer=data["answer"]
+                    )
+                    last_tool_call_id_ref["id"] = None
+                    user_input = ""
+                    add_user_message = False
+                else:
+                    user_input = data["answer"]
+                    add_user_message = True
+                await _process_agent_results(
+                    websocket=websocket,
+                    agent=agent,
+                    user_input=user_input,
+                    add_user_message=add_user_message,
+                    last_tool_call_id_ref=last_tool_call_id_ref
+                )
+            else:
+                await websocket.send_json(
+                    {"error": "Invalid payload: expected 'query' or 'answer'"}
+                )
+    except WebSocketDisconnect:
+        print("QA WebSocket disconnected")
+    except Exception as e:
+        if websocket.application_state == WebSocketState.CONNECTED:
+            await websocket.send_json({"error": str(e)})
+            await websocket.send_json({"type": "done"})
+            await websocket.close()
+
+
+class UnknownActionError(Exception):
+    def __init__(self, action: str):
+        self.action = action
+        super().__init__(f"Unknown action: {action}")
+
+
+class BasePayload(TypedDict, total=False):
+    action: str
+    user_id: int
+    query: Optional[str]
+    genres: Optional[list[str]]
+    atmospheres: Optional[list[str]]
+    start_year: Optional[int]
+    end_year: Optional[int]
+
+
+async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: MovieAgent):
+    async for result in agent.run_movie_streaming(
+        user_id=data["user_id"],
+        query=data.get("query"),
+        genres=data.get("genres"),
+        atmospheres=data.get("atmospheres"),
+        start_year=data.get("start_year", 1900),
+        end_year=data.get("end_year", 2025)
+    ):
+        if websocket.application_state != WebSocketState.CONNECTED:
+            break
+        await websocket.send_json(result)
+
+
+async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommender: MovieWeaviateRecommender):
+    genres = data.get("genres")
+    if genres and "любой" in genres:
+        genres = None
+
+    atmospheres = data.get("atmospheres")
+    if atmospheres and "любой" in atmospheres:
+        wv_query = None
+    else:
+        wv_query = ",".join([ATMOSPHERE_MAPPING[a] for a in atmospheres]) if atmospheres else None
+
+    async for movie in recommender.movie_generator(
+        user_id=data["user_id"],
+        query=wv_query,
+        movie_name=data.get("movie_name") or None,
+        genres=genres,
+        start_year=data.get("start_year", 1900),
+        end_year=data.get("end_year", 2025),
+        rating_kp=data.get("rating_kp", 5.0),
+        rating_imdb=data.get("rating_imdb", 5.0),
+    ):
+        await websocket.send_text(json.dumps(movie, ensure_ascii=False))
+
+    await websocket.send_text("__END__")
+
+
+async def handle_similar_movie_streaming(websocket: WebSocket, data: dict, recommender: MovieWeaviateRecommender):
+    async for movie in recommender.movie_generator(
+        user_id=data["user_id"],
+        source_kp_id=data.get("source_kp_id"),
+    ):
+        await websocket.send_text(json.dumps(movie, ensure_ascii=False))
+
+    await websocket.send_text("__END__")
+
+
+ActionHandler = Callable[[WebSocket, dict, Any], Awaitable[None]]
+ACTION_HANDLERS: dict[str, ActionHandler] = {
+    "movie_agent_streaming": handle_movie_agent_streaming,
+    "movie_wv_streaming": handle_movie_wv_streaming,
+    "similar_movie_streaming": handle_similar_movie_streaming,
+}
+
+
+async def send_ws_error(websocket: WebSocket, error: Exception):
+    logger.warning(f"WebSocket error: {error}")
+    if websocket.application_state == WebSocketState.CONNECTED:
+        await websocket.send_json({"error": str(error)})
+        await websocket.send_text("__ERROR__")
+
+
+@router.websocket("/movie_streaming-ws")
+async def movie_streaming_ws(websocket: WebSocket):
+    await websocket.accept()
+    agent = MovieAgent(
+        openai_client=openai_client_base,
+        kp_client=kp_client,
+        recommender=websocket.app.state.recommender
+    )
+    recommender: MovieWeaviateRecommender = websocket.app.state.recommender
+
+    try:
+        while True:
+            data: BasePayload = await websocket.receive_json()
+            action = data.get("action")
+
+            handler = ACTION_HANDLERS.get(action)
+            if not handler:
+                raise UnknownActionError(action)
+
+            if action == "movie_agent_streaming":
+                await handler(websocket, data, agent)
+            else:
+                await handler(websocket, data, recommender)
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket отключился")
+    except UnknownActionError as e:
+        await send_ws_error(websocket, e)
+    except Exception as e:
+        await send_ws_error(websocket, e)

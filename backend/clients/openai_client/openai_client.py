@@ -39,14 +39,14 @@ def fix_movie_title(title):
 class OpenAIClient:
     def __init__(
             self,
+            openai_client_base: OpenAI,
             kp_client: KinopoiskClient,
-            client: OpenAI =OpenAI(),
             model_qa: str = MODEL_QA,
             model_movies: str = MODEL_MOVIES,
             temperature_qa: float = TEMPERATURE_QA,
             temperature_movies: float = TEMPERATURE_MOVIES,
     ):
-        self.client = client
+        self.client = openai_client_base
         self.kp_client = kp_client
         self.model_qa = model_qa
         self.model_movies = model_movies

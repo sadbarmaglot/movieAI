@@ -136,6 +136,7 @@ class MovieManager(BaseManager):
             await self.session.execute(
                 insert(skipped_movies).values(user_id=user_id, kp_id=kp_id)
             )
+            logger.info(f"{kp_id} was skipped")
 
     @read_only
     async def get_skipped(self, user_id: int) -> List[int]:
