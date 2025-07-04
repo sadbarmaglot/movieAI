@@ -13,7 +13,8 @@ let currentQuestion = null;
 let awaitingResponse = false;
 let userText = "";
 
-const socket = new WebSocket("ws://localhost:8080/movie-agent-qa");
+// const socket = new WebSocket("ws://localhost:8080/movie-agent-qa");
+const socket = new WebSocket("wss://auto-gens.com/movie-agent-qa");
 
 socket.onopen = () => {
     addMessage("Привет! Опиши, какой фильм ты хочешь посмотреть (жанр, атмосфера, примеры и т.д.)", "bot");
