@@ -7,6 +7,8 @@ const chatBox = document.getElementById('chat-box');
 const userInput = document.getElementById('user-input');
 const sendButton = document.getElementById('send-button');
 const suggestions = document.getElementById('suggestions');
+const inputField = document.getElementById('user-input');
+const container = document.querySelector('.container');
 
 let userAnswers = null
 let currentQuestion = null;
@@ -199,6 +201,14 @@ document.addEventListener('touchstart', (event) => {
 
 sendButton.addEventListener('click', handleInputEvent);
 userInput.addEventListener('keypress', handleInputEvent);
+
+inputField.addEventListener('focus', () => {
+    container.classList.add('keyboard-open');
+});
+
+inputField.addEventListener('blur', () => {
+    container.classList.remove('keyboard-open');
+});
 
 document.addEventListener("DOMContentLoaded", async () => {
     backButton("index.html");
