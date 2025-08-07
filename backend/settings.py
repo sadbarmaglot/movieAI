@@ -81,6 +81,7 @@ ALLOW_ORIGINS = [
     "https://autogenz.com",
     "https://storage.googleapis.com",
     "http://localhost:5173",
+    "https://movieaiapp.com"
 ]
 
 # clients.bq_client
