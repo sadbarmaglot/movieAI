@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 
 from settings import ASYNC_DATABASE_URL
 
-async_engine = create_async_engine(ASYNC_DATABASE_URL, future=True, echo=True, pool_pre_ping=True)
+async_engine = create_async_engine(ASYNC_DATABASE_URL, future=True, echo=False, pool_pre_ping=True)
 AsyncSessionFactory = sessionmaker(async_engine, expire_on_commit=False, class_=AsyncSession) # type: ignore
 
 metadata = MetaData()

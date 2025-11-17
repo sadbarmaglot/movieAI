@@ -60,7 +60,11 @@ EXCLUDED_AUTH_PATHS = {
     "/docs",
     "/docs/oauth2-redirect",
     "/openapi.json",
-    "/redoc"
+    "/redoc",
+    "/add-favorites",
+    "/delete-favorites",
+    "/watch-favorites",
+    "/add-skipped"
 }
 
 # middlewares.db_session_middleware
