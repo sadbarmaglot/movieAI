@@ -8,7 +8,9 @@ from db_managers.base import (
     BaseManager,
     movies,
     skipped_movies,
+    ios_skipped_movies,
     favorite_movies,
+    ios_favorite_movies,
     read_only,
     transactional
 )
@@ -118,40 +120,64 @@ class MovieManager(BaseManager):
                 logger.info("✅ Фильм %s добавлен в БД", movie_data.title_alt)
 
     @transactional
-    async def add_skipped_movies(self, user_id: int, kp_id: int) -> None:
+    async def add_skipped_movies(self, user_id, kp_id: int, platform: str = "telegram") -> None:
         """
         Асинхронно вставляет новые строки в таблицу skipped_movies.
-        :param user_id: ID пользователя
+        :param user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
         :param kp_id: ID фильма на Кинопоиске
-
+        :param platform: 'telegram' or 'ios'
         """
+        # Выбираем таблицу в зависимости от платформы
+        if platform == "ios":
+            skipped_table = ios_skipped_movies
+            user_field = ios_skipped_movies.c.device_id
+            values = {"device_id": user_id, "kp_id": kp_id}
+        else:
+            skipped_table = skipped_movies
+            user_field = skipped_movies.c.user_id
+            values = {"user_id": user_id, "kp_id": kp_id}
+        
         result = await self.session.execute(
-            select(skipped_movies).where(
-                (skipped_movies.c.user_id == user_id) &  # type: ignore
-                (skipped_movies.c.kp_id == kp_id)  # type: ignore
+            select(skipped_table).where(
+                (user_field == user_id) &  # type: ignore
+                (skipped_table.c.kp_id == kp_id)  # type: ignore
             )
         )
         exists = result.scalar_one_or_none()
         if not exists:
             await self.session.execute(
-                insert(skipped_movies).values(user_id=user_id, kp_id=kp_id)
+                insert(skipped_table).values(**values)
             )
             logger.info(f"{kp_id} was skipped")
 
     @read_only
-    async def get_skipped(self, user_id: int) -> List[int]:
-
+    async def get_skipped(self, user_id, platform: str = "telegram") -> List[int]:
+        """Получает список пропущенных фильмов"""
+        if platform == "ios":
+            skipped_table = ios_skipped_movies
+            user_field = ios_skipped_movies.c.device_id
+        else:
+            skipped_table = skipped_movies
+            user_field = skipped_movies.c.user_id
+        
         result = await self.session.execute(
-            select(skipped_movies).where(skipped_movies.c.user_id == user_id) # type: ignore
+            select(skipped_table).where(user_field == user_id) # type: ignore
         )
         rows = result.fetchall()
         return [row.kp_id for row in rows]
 
     @read_only
-    async def get_favorites(self, user_id: int) -> List[int]:
-
+    async def get_favorites(self, user_id, platform: str = "telegram") -> List[int]:
+        """Получает список избранных фильмов (только kp_id)"""
+        if platform == "ios":
+            favorites_table = ios_favorite_movies
+            user_field = ios_favorite_movies.c.device_id
+        else:
+            favorites_table = favorite_movies
+            user_field = favorite_movies.c.user_id
+        
         result = await self.session.execute(
-            select(favorite_movies).where(favorite_movies.c.user_id == user_id) # type: ignore
+            select(favorites_table).where(user_field == user_id) # type: ignore
         )
         rows = result.fetchall()
         return [row.kp_id for row in rows]

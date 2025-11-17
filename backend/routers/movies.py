@@ -14,12 +14,12 @@ from fastapi.websockets import WebSocketState
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, List, Callable, Awaitable, TypedDict, Any
+from typing import Optional, List, Callable, Awaitable, TypedDict, Any, Union
 
 
 from clients import (
     kp_client,
-    openai_client_base,
+    openai_client_base_async,
     openai_client,
 )
 from clients.weaviate_client import MovieWeaviateRecommender
@@ -55,7 +55,8 @@ async def questions_streaming(
     body: QuestionStreamingRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    await check_user_stars(session, user_id=body.user_id)
+    platform = body.platform or "telegram"
+    await check_user_stars(session, user_id=body.user_id, platform=platform)
     return await openai_client.stream_questions()
 
 @router.post("/movies-streaming")
@@ -63,10 +64,12 @@ async def movies_streaming(
     body: MovieStreamingRequest,
     session: AsyncSession = Depends(get_session),
 ):
-    await check_user_stars(session, user_id=body.user_id)
+    platform = body.platform or "telegram"
+    await check_user_stars(session, user_id=body.user_id, platform=platform)
 
     return await openai_client.stream_movies(
         user_id=body.user_id,
+        platform=platform,
         chat_answers=body.chat_answers,
         genres=body.categories,
         atmospheres=body.atmospheres,
@@ -115,7 +118,11 @@ async def add_skipped_movie(
     body: AddSkippedRequest,
     movie_manager: MovieManager = Depends(get_movie_manager)
 ):
-    await movie_manager.add_skipped_movies(user_id=body.user_id, kp_id=body.movie_id)
+    await movie_manager.add_skipped_movies(
+        user_id=body.user_id, 
+        kp_id=body.movie_id,
+        platform=body.platform
+    )
 
 
 async def _process_agent_results(
@@ -143,7 +150,7 @@ async def movie_agent_qa_ws(websocket: WebSocket):
     await websocket.accept()
 
     agent = MovieAgent(
-        openai_client=openai_client_base,
+        openai_client=openai_client_base_async,
         kp_client=kp_client,
         recommender=websocket.app.state.recommender
     )
@@ -202,7 +209,8 @@ class UnknownActionError(Exception):
 
 class BasePayload(TypedDict, total=False):
     action: str
-    user_id: int
+    user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
+    platform: Optional[str]  # 'telegram' or 'ios'
     query: Optional[str]
     genres: Optional[list[str]]
     atmospheres: Optional[list[str]]
@@ -211,8 +219,10 @@ class BasePayload(TypedDict, total=False):
 
 
 async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: MovieAgent):
+    platform = data.get("platform", "telegram")
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
+        platform=platform,
         query=data.get("query"),
         genres=data.get("genres"),
         atmospheres=data.get("atmospheres"),
@@ -235,8 +245,10 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
     else:
         wv_query = ",".join([ATMOSPHERE_MAPPING[a] for a in atmospheres]) if atmospheres else None
 
+    platform = data.get("platform", "telegram")
     async for movie in recommender.movie_generator(
         user_id=data["user_id"],
+        platform=platform,
         query=wv_query,
         movie_name=data.get("movie_name") or None,
         genres=genres,
@@ -251,8 +263,10 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
 
 
 async def handle_similar_movie_streaming(websocket: WebSocket, data: dict, recommender: MovieWeaviateRecommender):
+    platform = data.get("platform", "telegram")
     async for movie in recommender.movie_generator(
         user_id=data["user_id"],
+        platform=platform,
         source_kp_id=data.get("source_kp_id"),
     ):
         await websocket.send_text(json.dumps(movie, ensure_ascii=False))
@@ -279,7 +293,7 @@ async def send_ws_error(websocket: WebSocket, error: Exception):
 async def movie_streaming_ws(websocket: WebSocket):
     await websocket.accept()
     agent = MovieAgent(
-        openai_client=openai_client_base,
+        openai_client=openai_client_base_async,
         kp_client=kp_client,
         recommender=websocket.app.state.recommender
     )

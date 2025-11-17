@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 
 from fastapi import APIRouter, Depends
 
@@ -16,28 +16,42 @@ router = APIRouter()
 
 @router.get("/get-favorites", response_model=List[GetFavoriteResponse])
 async def get_favorites_movies(
-    user_id: int,
+    user_id: Union[int, str],  # int для Telegram, str (device_id) для iOS
+    platform: str = "telegram",
     favorite_manager: FavoriteManager = Depends(get_favorite_manager)
 ):
-    return await favorite_manager.get_favorites(user_id=user_id)
+    return await favorite_manager.get_favorites(user_id=user_id, platform=platform)
 
 @router.post("/add-favorites")
 async def add_favorite_movie(
     body: AddFavoriteRequest,
     favorite_manager: FavoriteManager = Depends(get_favorite_manager)
 ):
-    await favorite_manager.add_favorite(user_id=body.user_id, kp_id=body.movie_id)
+    await favorite_manager.add_favorite(
+        user_id=body.user_id, 
+        kp_id=body.movie_id, 
+        platform=body.platform
+    )
 
 @router.post("/delete-favorites")
 async def delete_favorite_movie(
     body: DeleteFavoriteRequest,
     favorite_manager: FavoriteManager = Depends(get_favorite_manager)
 ):
-    await favorite_manager.remove_favorite(user_id=body.user_id, kp_id=body.movie_id)
+    await favorite_manager.remove_favorite(
+        user_id=body.user_id, 
+        kp_id=body.movie_id,
+        platform=body.platform
+    )
 
 @router.post("/watch-favorites")
 async def watch_favorite_movie(
     body: WatchFavoriteRequest,
     favorite_manager: FavoriteManager = Depends(get_favorite_manager)
 ):
-    await favorite_manager.mark_watched(user_id=body.user_id, kp_id=body.movie_id, is_watched=body.is_watched)
+    await favorite_manager.mark_watched(
+        user_id=body.user_id, 
+        kp_id=body.movie_id, 
+        is_watched=body.is_watched,
+        platform=body.platform
+    )

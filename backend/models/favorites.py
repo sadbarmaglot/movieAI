@@ -1,10 +1,11 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 class AddFavoriteRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     movie_id: int
+    platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
 
 
 class GetFavoriteResponse(BaseModel):
@@ -25,11 +26,13 @@ class GetFavoriteResponse(BaseModel):
 
 
 class DeleteFavoriteRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     movie_id: int
+    platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
 
 
 class WatchFavoriteRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     movie_id: int
     is_watched: bool
+    platform: Optional[str] = "telegram"  # 'telegram' or 'ios'

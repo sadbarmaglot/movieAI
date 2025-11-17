@@ -32,3 +32,11 @@ class LogEventRequest(BaseModel):
     start_param: Optional[str] = ""
     extra: Optional[Dict] = {}
 
+
+class IOSUserInitRequest(BaseModel):
+    device_id: str  # UUID устройства
+
+
+class IOSUserInitResponse(BaseModel):
+    device_id: str
+

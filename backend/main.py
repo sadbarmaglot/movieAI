@@ -3,7 +3,6 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 
 from middlewares import (
     AuthMiddleware,
@@ -12,8 +11,7 @@ from middlewares import (
 )
 from clients.weaviate_client  import MovieWeaviateRecommender, load_vectorstore_weaviate
 
-from clients.client_factory import kp_client
-from clients.movie_agent import MovieAgent
+from clients.client_factory import kp_client, openai_client_base_async
 from openapi_config import custom_openapi
 from routers import health, favorites, movies, users
 from settings import ALLOW_ORIGINS
@@ -29,16 +27,15 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     weaviate_client = load_vectorstore_weaviate()
     weaviate_client.connect()
-    openai_client = OpenAI()
     recommender = MovieWeaviateRecommender(
         weaviate_client=weaviate_client,
-        openai_client=openai_client,
+        openai_client=openai_client_base_async,
         kp_client=kp_client
     )
     logger.info("✅ MovieWeaviateRecommender initialized with Weaviate.")
 
     app.state.recommender = recommender
-    app.state.openai_client = openai_client
+    app.state.openai_client = openai_client_base_async
 
     yield
 

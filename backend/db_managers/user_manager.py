@@ -8,6 +8,7 @@ from db_managers.base import (
     AsyncSessionFactory,
     BaseManager,
     users,
+    ios_users,
     referrals,
     payments,
     read_only,
@@ -58,6 +59,7 @@ class UserManager(BaseManager):
 
     @transactional
     async def ensure_user_exists(self, user_id: int) -> UserInitResponse:
+        """Создает/получает Telegram пользователя"""
         result = await self.session.execute(
             select(users.c.balance).where(users.c.user_id == user_id) # type: ignore
         )
@@ -70,6 +72,29 @@ class UserManager(BaseManager):
             insert(users).values(user_id=user_id, balance=balance)
         )
         return UserInitResponse(user_id=user_id, balance=balance)
+
+    @transactional
+    async def ensure_ios_user_exists(self, device_id: str) -> dict:
+        """Создает/получает iOS пользователя по device_id"""
+        result = await self.session.execute(
+            select(ios_users.c.device_id).where(ios_users.c.device_id == device_id) # type: ignore
+        )
+        user_row = result.first()
+        if user_row:
+            return {"device_id": device_id, "exists": True}
+
+        await self.session.execute(
+            insert(ios_users).values(device_id=device_id)
+        )
+        return {"device_id": device_id, "exists": False}
+
+    @read_only
+    async def check_ios_user_exists(self, device_id: str) -> bool:
+        """Проверяет существование iOS пользователя"""
+        result = await self.session.execute(
+            select(1).where(ios_users.c.device_id == device_id) # type: ignore
+        )
+        return result.scalar_one_or_none() is not None
 
     @transactional
     async def update_balance(self, user_id: int, delta: int):

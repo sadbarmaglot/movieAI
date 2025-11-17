@@ -90,6 +90,30 @@ referrals = Table(
     Column("created_at", DateTime(timezone=True), server_default=func.now())
 )
 
+# Таблицы для iOS пользователей
+# Используем device_id (UUID) как уникальный идентификатор
+ios_users = Table(
+    "ios_users", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("device_id", String(255), unique=True, nullable=False),  # UUID устройства (уникальный идентификатор)
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+)
+
+ios_favorite_movies = Table(
+    "ios_favorite_movies", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("device_id", String(255), nullable=False),  # Ссылка на ios_users.device_id
+    Column("iswatched", Boolean, nullable=True, default=False),
+    Column("kp_id", Integer, nullable=False),
+)
+
+ios_skipped_movies = Table(
+    "ios_skipped_movies", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("device_id", String(255), nullable=False),  # Ссылка на ios_users.device_id
+    Column("kp_id", Integer, nullable=False),
+)
 
 def transactional(function):
     @wraps(function)

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional, TypedDict
+from typing import List, Optional, TypedDict, Union
 
 
 class ChatQA(BaseModel):
@@ -8,11 +8,13 @@ class ChatQA(BaseModel):
 
 
 class QuestionStreamingRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
+    platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
 
 
 class MovieStreamingRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
+    platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
     chat_answers: List[ChatQA] = None
     categories: Optional[List[str]] = None
     atmospheres: Optional[List[str]] = None
@@ -91,8 +93,9 @@ class MovieResponse(BaseModel):
 
 
 class AddSkippedRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     movie_id: int
+    platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
 
 
 class MovieObject(TypedDict):

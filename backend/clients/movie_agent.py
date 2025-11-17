@@ -4,7 +4,7 @@ import asyncio
 
 from pydantic import BaseModel
 from fastapi import HTTPException
-from openai import OpenAI
+from openai import AsyncOpenAI
 from openai.types.chat import (
     ChatCompletionSystemMessageParam,
     ChatCompletionUserMessageParam,
@@ -41,7 +41,7 @@ class EnrichedMovieObject(BaseModel):
 
 class MovieAgent:
     def __init__(self,
-                 openai_client: OpenAI,
+                 openai_client: AsyncOpenAI,
                  kp_client: KinopoiskClient,
                  recommender: MovieWeaviateRecommender,
                  system_prompt: str = SYSTEM_PROMPT_AGENT,
@@ -73,7 +73,7 @@ class MovieAgent:
             movies_list=self._format_movies_for_rerank(movies)
         )
 
-        response = self.openai_client.chat.completions.create(
+        response = await self.openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 ChatCompletionSystemMessageParam(role="system", content="Ты помощник по подбору фильмов."),
@@ -83,7 +83,7 @@ class MovieAgent:
         )
 
         buffer = ""
-        for chunk in response:
+        async for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 buffer += chunk.choices[0].delta.content
                 lines = buffer.split("\n")
@@ -100,11 +100,12 @@ class MovieAgent:
 
     @staticmethod
     async def _get_user_excluded_kp_ids(
-            user_id: int,
-            movie_manager: MovieManager
+            user_id,
+            movie_manager: MovieManager,
+            platform: str = "telegram"
     ) -> Set[int]:
-        skipped = await movie_manager.get_skipped(user_id)
-        favorites = await movie_manager.get_favorites(user_id)
+        skipped = await movie_manager.get_skipped(user_id, platform=platform)
+        favorites = await movie_manager.get_favorites(user_id, platform=platform)
         return set(skipped + favorites)
 
     async def _enrich_movie(
@@ -182,7 +183,7 @@ class MovieAgent:
             self.messages.append({"role": "user", "content": user_input})
 
         while True:
-            response = self.openai_client.chat.completions.create(
+            response = await self.openai_client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
                 tools=self.tools,
@@ -237,8 +238,9 @@ class MovieAgent:
 
     async def run_movie_streaming(
             self,
-            user_id: int,
-            query: str,
+            user_id,
+            platform: str = "telegram",
+            query: str = None,
             genres: list = None,
             atmospheres: list = None,
             start_year: int = None,
@@ -246,15 +248,23 @@ class MovieAgent:
     ) -> AsyncGenerator[dict, None]:
         """
         Поиск фильмов на основе финального запроса
+        
+        Args:
+            user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
+            platform: 'telegram' or 'ios'
         """
         if atmospheres is not None:
             query += ", " + ", ".join(ATMOSPHERE_MAPPING.get(a, "") for a in atmospheres)
 
         async with AsyncSessionFactory() as session:
             movie_manager = MovieManager(session)
-            exclude_set = await self._get_user_excluded_kp_ids(user_id=user_id, movie_manager=movie_manager)
+            exclude_set = await self._get_user_excluded_kp_ids(
+                user_id=user_id, 
+                movie_manager=movie_manager,
+                platform=platform
+            )
 
-            movies = self.recommender.recommend(
+            movies = await self.recommender.recommend(
                 query=query,
                 genres=genres,
                 start_year=start_year,

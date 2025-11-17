@@ -11,13 +11,25 @@ class PermissionDenied(Exception):
 
 async def check_user_stars(
     session: AsyncSession,
-    user_id: int,
+    user_id,
+    platform: str = "telegram",
     min_stars: int = 2,
     raise_http: bool = True
 ) -> bool:
     """
-    Проверка, хватает ли звёзд у пользователя. Если raise_http=True — бросает HTTP 403.
+    Проверка доступа пользователя к функционалу.
+    Для Telegram: проверяет баланс звезд
+    Для iOS: всегда разрешает (монетизация через подписки, проверяется отдельно)
+    
+    Args:
+        user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
+        platform: 'telegram' or 'ios'
     """
+    # Для iOS не проверяем баланс (монетизация через подписки)
+    if platform == "ios":
+        return True
+    
+    # Для Telegram проверяем баланс звезд
     user_manager = UserManager(session=session)
     allowed = await user_manager.check_user_stars_balance(user_id=user_id, min_stars=min_stars)
 

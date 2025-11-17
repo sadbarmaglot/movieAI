@@ -139,7 +139,8 @@ class OpenAIClient:
 
     async def stream_movies(
         self,
-        user_id: int,
+        user_id,
+        platform: str = "telegram",
         chat_answers: Optional[List[ChatQA]] = None,
         genres: Optional[List[str]] = None,
         atmospheres: Optional[List[str]] = None,
@@ -165,11 +166,13 @@ class OpenAIClient:
             favorites_movies_set = set(favorites)
             found_movies = set()
 
-            async with AsyncSessionFactory() as session:
-                async with session.begin():
-                    user_manager = UserManager(session)
-                    await user_manager.deduct_user_stars(user_id=user_id, amount=2)
-                    logger.info("✅ Stars deducted successfully for user_id=%s", user_id)
+            # Для Telegram списываем звезды, для iOS - нет (монетизация через подписки)
+            if platform == "telegram":
+                async with AsyncSessionFactory() as session:
+                    async with session.begin():
+                        user_manager = UserManager(session)
+                        await user_manager.deduct_user_stars(user_id=user_id, amount=2)
+                        logger.info("✅ Stars deducted successfully for user_id=%s", user_id)
 
             async with AsyncSessionFactory() as session:
                 async with session.begin():

@@ -4,7 +4,7 @@ import asyncio
 
 from fastapi import HTTPException
 from typing import Optional, List, Set, AsyncGenerator
-from openai import OpenAI
+from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 from weaviate.connect import ConnectionParams
 from weaviate.classes.query import Filter
@@ -45,7 +45,7 @@ class MovieWeaviateRecommender:
     def __init__(self,
                  weaviate_client: WeaviateClient,
                  kp_client: KinopoiskClient,
-                 openai_client: OpenAI,
+                 openai_client: AsyncOpenAI,
                  model_name=MODEL_EMBS,
                  top_k_hybrid=TOP_K_HYBRID,
                  top_k_fetch=TOP_K_FETCH,
@@ -128,7 +128,7 @@ class MovieWeaviateRecommender:
             "votes_kp", "votes_imdb", "page_content"
         ]
 
-    def _search_movies(
+    async def _search_movies(
             self,
             query: Optional[str],
             alpha: float,
@@ -164,10 +164,11 @@ class MovieWeaviateRecommender:
         """
         try:
             if query:
-                embedding = self.openai_client.embeddings.create(
+                embedding_response = await self.openai_client.embeddings.create(
                     input=query,
                     model=self.model_name
-                ).data[0].embedding
+                )
+                embedding = embedding_response.data[0].embedding
 
                 results = self.collection.query.hybrid(
                     vector=embedding,
@@ -207,18 +208,18 @@ class MovieWeaviateRecommender:
             logger.warning(f"[MovieRAG] Ошибка в _search_movies: {e}")
             return []
 
-    def search(self, query: str) -> List[MovieObject]:
+    async def search(self, query: str) -> List[MovieObject]:
         """
         Выполняет гибридный поиск фильмов в Weaviate по заданному текстовому запросу (query).
         """
-        return self._search_movies(
+        return await self._search_movies(
             query=query,
             alpha=0.3,
             fetch_limit=self.top_k_search,
             result_limit=10,
         )
 
-    def recommend(
+    async def recommend(
         self,
         query: str = None,
         genres: List[str] = None,
@@ -241,7 +242,7 @@ class MovieWeaviateRecommender:
         if genres is not None:
             filters = filters & Filter.by_property("genres").contains_all(genres)
 
-        return self._search_movies(
+        return await self._search_movies(
             query=query,
             alpha=0.7,
             fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
@@ -324,11 +325,12 @@ class MovieWeaviateRecommender:
 
     @staticmethod
     async def _get_user_excluded_kp_ids(
-            user_id: int,
-            movie_manager: MovieManager
+            user_id,
+            movie_manager: MovieManager,
+            platform: str = "telegram"
     ) -> Set[int]:
-        skipped = await movie_manager.get_skipped(user_id)
-        favorites = await movie_manager.get_favorites(user_id)
+        skipped = await movie_manager.get_skipped(user_id, platform=platform)
+        favorites = await movie_manager.get_favorites(user_id, platform=platform)
         return set(skipped + favorites)
 
     async def _get_or_fetch_movie(
@@ -368,7 +370,8 @@ class MovieWeaviateRecommender:
 
     async def movie_generator(
             self,
-            user_id: int,
+            user_id,
+            platform: str = "telegram",
             source_kp_id: int = None,
             query: str = None,
             movie_name: str = None,
@@ -387,7 +390,8 @@ class MovieWeaviateRecommender:
         - Иначе используется метод `recommend`, исключая фильмы из пропущенных и избранных пользователя.
 
         Параметры:
-            user_id (int): ID пользователя Telegram.
+            user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
+            platform: 'telegram' or 'ios'
             source_kp_id (int): ID фильма, к которому нужно подобрать похожие
             query (str, optional): Текстовый запрос (например, атмосфера или описание).
             movie_name (str, optional): Точное имя фильма для поиска (приоритетный путь).
@@ -408,17 +412,21 @@ class MovieWeaviateRecommender:
 
             exclude_set: set[int] = set()
             if movie_name is None:
-                exclude_set = await self._get_user_excluded_kp_ids(user_id=user_id, movie_manager=movie_manager)
+                exclude_set = await self._get_user_excluded_kp_ids(
+                    user_id=user_id, 
+                    movie_manager=movie_manager,
+                    platform=platform
+                )
 
             if movie_name is not None:
-                movies = self.search(query=movie_name)
+                movies = await self.search(query=movie_name)
             elif source_kp_id is not None:
                 movies=self.recommend_similar(
                     source_kp_id=source_kp_id,
                     exclude_kp_ids=exclude_set
                 )
             else:
-                movies = self.recommend(
+                movies = await self.recommend(
                     query=query,
                     genres=genres,
                     start_year=start_year,

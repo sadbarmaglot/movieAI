@@ -10,6 +10,7 @@ from models import (
     ReferralRequestModel,
     PaymentRequest
 )
+from models.users import IOSUserInitRequest, IOSUserInitResponse
 
 router = APIRouter()
 
@@ -51,5 +52,15 @@ async def log_event(
         start_param=body.start_param,
         extra=body.extra
     )
+
+
+@router.post("/ios/user-init", response_model=IOSUserInitResponse)
+async def init_ios_user(
+    body: IOSUserInitRequest,
+    user_manager: UserManager = Depends(get_user_manager)
+):
+    """Инициализация iOS пользователя по device_id"""
+    result = await user_manager.ensure_ios_user_exists(device_id=body.device_id)
+    return IOSUserInitResponse(device_id=result["device_id"])
 
 
