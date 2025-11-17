@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 from sqlalchemy import select, insert, delete, update
 
 from db_managers.base import (
@@ -14,7 +14,7 @@ from models import GetFavoriteResponse
 class FavoriteManager(BaseManager):
 
     @read_only
-    async def get_favorites(self, user_id: int, platform: str = "telegram") -> List[GetFavoriteResponse]:
+    async def get_favorites(self, user_id: Union[int, str], platform: str = "telegram") -> List[GetFavoriteResponse]:
         """
         Получает избранные фильмы пользователя.
         
@@ -26,16 +26,18 @@ class FavoriteManager(BaseManager):
         if platform == "ios":
             favorites_table = ios_favorite_movies
             user_field = ios_favorite_movies.c.device_id
+            user_id_value = str(user_id)
         else:
             favorites_table = favorite_movies
             user_field = favorite_movies.c.user_id
+            user_id_value = int(user_id) if isinstance(user_id, str) else user_id
         
         favorites_subquery = (
             select(
                 favorites_table.c.id,
                 favorites_table.c.kp_id,
                 favorites_table.c.iswatched
-            ).where(user_field == user_id) # type: ignore
+            ).where(user_field == user_id_value) # type: ignore
         ).subquery()
 
         query = (
@@ -83,7 +85,7 @@ class FavoriteManager(BaseManager):
         ]
 
     @transactional
-    async def add_favorite(self, user_id, kp_id: int, platform: str = "telegram") -> None:
+    async def add_favorite(self, user_id: Union[int, str], kp_id: int, platform: str = "telegram") -> None:
         """
         Добавляет фильм в избранное.
         
@@ -96,15 +98,17 @@ class FavoriteManager(BaseManager):
         if platform == "ios":
             favorites_table = ios_favorite_movies
             user_field = ios_favorite_movies.c.device_id
-            values = {"device_id": user_id, "kp_id": kp_id}
+            user_id_value = str(user_id)
+            values = {"device_id": user_id_value, "kp_id": kp_id}
         else:
             favorites_table = favorite_movies
             user_field = favorite_movies.c.user_id
-            values = {"user_id": user_id, "kp_id": kp_id}
+            user_id_value = int(user_id) if isinstance(user_id, str) else user_id
+            values = {"user_id": user_id_value, "kp_id": kp_id}
         
         result = await self.session.execute(
             select(favorites_table).where(
-                (user_field == user_id) & # type: ignore
+                (user_field == user_id_value) & # type: ignore
                 (favorites_table.c.kp_id == kp_id) # type: ignore
             )
         )
@@ -115,36 +119,40 @@ class FavoriteManager(BaseManager):
             )
 
     @transactional
-    async def remove_favorite(self, user_id, kp_id: int, platform: str = "telegram") -> None:
+    async def remove_favorite(self, user_id: Union[int, str], kp_id: int, platform: str = "telegram") -> None:
         """Удаляет фильм из избранного"""
         if platform == "ios":
             favorites_table = ios_favorite_movies
             user_field = ios_favorite_movies.c.device_id
+            user_id_value = str(user_id)
         else:
             favorites_table = favorite_movies
             user_field = favorite_movies.c.user_id
+            user_id_value = int(user_id) if isinstance(user_id, str) else user_id
         
         await self.session.execute(
             delete(favorites_table).where(
-                (user_field == user_id) & # type: ignore
+                (user_field == user_id_value) & # type: ignore
                 (favorites_table.c.kp_id == kp_id) # type: ignore
             )
         )
 
     @transactional
-    async def mark_watched(self, user_id, kp_id: int, is_watched: bool, platform: str = "telegram") -> None:
+    async def mark_watched(self, user_id: Union[int, str], kp_id: int, is_watched: bool, platform: str = "telegram") -> None:
         """Отмечает фильм как просмотренный/непросмотренный"""
         if platform == "ios":
             favorites_table = ios_favorite_movies
             user_field = ios_favorite_movies.c.device_id
+            user_id_value = str(user_id)
         else:
             favorites_table = favorite_movies
             user_field = favorite_movies.c.user_id
+            user_id_value = int(user_id) if isinstance(user_id, str) else user_id
         
         await self.session.execute(
             update(favorites_table)
             .where(
-                (user_field == user_id) & # type: ignore
+                (user_field == user_id_value) & # type: ignore
                 (favorites_table.c.kp_id == kp_id) # type: ignore
             )
             .values(iswatched=is_watched)
