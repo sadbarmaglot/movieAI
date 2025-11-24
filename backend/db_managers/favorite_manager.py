@@ -6,7 +6,6 @@ from db_managers.base import (
     favorite_movies,
     ios_favorite_movies,
     movies,
-    ios_movies,
     read_only,
     transactional
     )
@@ -45,61 +44,29 @@ class FavoriteManager(BaseManager):
             ).where(user_field == user_id_value) # type: ignore
         ).subquery()
 
-        # Выбираем таблицу фильмов в зависимости от платформы
-        if platform == "ios":
-            movies_table = ios_movies
-            # Для iOS возвращаем все данные для обеих локализаций
-            query = (
-                select(
-                    favorites_subquery.c.id,
-                    favorites_subquery.c.iswatched,
-                    movies_table.c.kp_id,
-                    movies_table.c.tmdb_id,
-                    movies_table.c.imdb_id,
-                    movies_table.c.name,
-                    movies_table.c.title,
-                    movies_table.c.description,
-                    movies_table.c.overview,
-                    movies_table.c.year,
-                    movies_table.c.kp_file_path,
-                    movies_table.c.tmdb_file_path,
-                    movies_table.c.rating_kp,
-                    movies_table.c.rating_imdb,
-                    movies_table.c.movie_length,
-                    movies_table.c.genres,
-                    movies_table.c.genres_tmdb,
-                    movies_table.c.countries,
-                    movies_table.c.origin_country,
-                    movies_table.c.kp_background_color,
-                    movies_table.c.tmdb_background_color,
-                )
-                .select_from(
-                    movies_table.join(favorites_subquery, favorites_subquery.c.kp_id == movies_table.c.kp_id)
-                )
+        # Используем таблицу movies для всех платформ
+        movies_table = movies
+        query = (
+            select(
+                favorites_subquery.c.id,
+                favorites_subquery.c.iswatched,
+                movies_table.c.kp_id,
+                movies_table.c.title_alt,
+                movies_table.c.title_ru,
+                movies_table.c.overview,
+                movies_table.c.year,
+                movies_table.c.google_cloud_url,
+                movies_table.c.rating_kp,
+                movies_table.c.rating_imdb,
+                movies_table.c.movie_length,
+                movies_table.c.genres,
+                movies_table.c.countries,
+                movies_table.c.background_color,
             )
-        else:
-            movies_table = movies
-            query = (
-                select(
-                    favorites_subquery.c.id,
-                    favorites_subquery.c.iswatched,
-                    movies_table.c.kp_id,
-                    movies_table.c.title_alt,
-                    movies_table.c.title_ru,
-                    movies_table.c.overview,
-                    movies_table.c.year,
-                    movies_table.c.google_cloud_url,
-                    movies_table.c.rating_kp,
-                    movies_table.c.rating_imdb,
-                    movies_table.c.movie_length,
-                    movies_table.c.genres,
-                    movies_table.c.countries,
-                    movies_table.c.background_color,
-                )
-                .select_from(
-                    movies_table.join(favorites_subquery, favorites_subquery.c.kp_id == movies_table.c.kp_id)
-                )
+            .select_from(
+                movies_table.join(favorites_subquery, favorites_subquery.c.kp_id == movies_table.c.kp_id)
             )
+        )
 
         result = await self.session.execute(query)
         rows = result.fetchall()
@@ -109,23 +76,23 @@ class FavoriteManager(BaseManager):
             return [
                 MovieResponseLocalized(
                     movie_id=row.kp_id,
-                    imdb_id=row.imdb_id,
-                    name=row.name or "",
-                    title=row.title or "",
-                    overview_ru=row.description,
-                    overview_en=row.overview,
-                    poster_url_kp=row.kp_file_path,
-                    poster_url_tmdb=row.tmdb_file_path,
+                    imdb_id=None,
+                    name=row.title_ru or "",
+                    title=row.title_alt or "",
+                    overview_ru=row.overview or "",
+                    overview_en=None,
+                    poster_url_kp=row.google_cloud_url or "",
+                    poster_url_tmdb=None,
                     year=row.year,
                     rating_kp=row.rating_kp,
                     rating_imdb=row.rating_imdb,
                     movie_length=row.movie_length,
                     genres_ru=row.genres or [],
-                    genres_en=row.genres_tmdb or [],
+                    genres_en=None,
                     countries_ru=row.countries or [],
-                    countries_en=row.origin_country or [],
-                    background_color_kp=row.kp_background_color,
-                    background_color_tmdb=row.tmdb_background_color,
+                    countries_en=None,
+                    background_color_kp=row.background_color,
+                    background_color_tmdb=None,
                 ) for row in rows
             ]
         else:  # telegram

@@ -33,23 +33,8 @@ async def get_favorites_movies(
 @router.post("/add-favorites")
 async def add_favorite_movie(
     body: AddFavoriteRequest,
-    request: Request,
     favorite_manager: FavoriteManager = Depends(get_favorite_manager),
-    movie_manager: MovieManager = Depends(get_movie_manager)
 ):
-    # Для iOS: убеждаемся, что фильм есть в ios_movies
-    if body.platform == "ios":
-        exists = await movie_manager.check_ios_movie_exists(body.movie_id)
-        if not exists:
-            # Получаем данные из Weaviate
-            recommender = request.app.state.recommender
-            weaviate_movie = await recommender.get_movie_by_kp_id(body.movie_id)
-            if weaviate_movie:
-                await movie_manager.ensure_ios_movie_from_weaviate(weaviate_movie)
-                logger.info(f"[add_favorite] Фильм kp_id={body.movie_id} добавлен в ios_movies из Weaviate")
-            else:
-                logger.warning(f"[add_favorite] Фильм kp_id={body.movie_id} не найден в Weaviate, пропускаем добавление в ios_movies")
-    
     await favorite_manager.add_favorite(
         user_id=body.user_id, 
         kp_id=body.movie_id, 

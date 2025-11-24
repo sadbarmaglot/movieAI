@@ -27,7 +27,6 @@ from clients.movie_agent import MovieAgent
 from db_managers import MovieManager
 from models import (
     MovieResponse,
-    MovieResponseLocalized,
     MovieStreamingRequest,
     QuestionStreamingRequest,
     AddSkippedRequest
@@ -83,16 +82,12 @@ async def movies_streaming(
         favorites=body.favorites
     )
 
-@router.get("/get-movie", response_model=Union[MovieResponse, MovieResponseLocalized])
+@router.get("/get-movie", response_model=MovieResponse)
 async def get_movie(
         movie_id: int,
-        platform: str = "telegram",  # 'telegram' or 'ios'
         movie_manager: MovieManager = Depends(get_movie_manager)
 ):
-    if platform == "ios":
-        return await movie_manager.get_ios_movie_by_kp_id(kp_id=movie_id)
-    else:
-        return await movie_manager.get_by_kp_id(kp_id=movie_id)
+    return await movie_manager.get_by_kp_id(kp_id=movie_id)
 
 @router.get("/preview/{params}", response_class=HTMLResponse)
 async def preview_movie(
@@ -122,22 +117,8 @@ async def preview_movie(
 @router.post("/add-skipped")
 async def add_skipped_movie(
     body: AddSkippedRequest,
-    request: Request,
     movie_manager: MovieManager = Depends(get_movie_manager)
 ):
-    # Для iOS: убеждаемся, что фильм есть в ios_movies
-    if body.platform == "ios":
-        exists = await movie_manager.check_ios_movie_exists(body.movie_id)
-        if not exists:
-            # Получаем данные из Weaviate
-            recommender = request.app.state.recommender
-            weaviate_movie = await recommender.get_movie_by_kp_id(body.movie_id)
-            if weaviate_movie:
-                await movie_manager.ensure_ios_movie_from_weaviate(weaviate_movie)
-                logger.info(f"[add_skipped] Фильм kp_id={body.movie_id} добавлен в ios_movies из Weaviate")
-            else:
-                logger.warning(f"[add_skipped] Фильм kp_id={body.movie_id} не найден в Weaviate, пропускаем добавление в ios_movies")
-    
     await movie_manager.add_skipped_movies(
         user_id=body.user_id, 
         kp_id=body.movie_id,
