@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import wraps
 from sqlalchemy import (
     Column,
@@ -113,6 +114,50 @@ ios_skipped_movies = Table(
     Column("id", Integer, primary_key=True),
     Column("device_id", String(255), nullable=False),  # Ссылка на ios_users.device_id
     Column("kp_id", Integer, nullable=False),
+)
+
+# Таблица фильмов для iOS с расширенной схемой (Movie_v2)
+ios_movies = Table(
+    "ios_movies", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("kp_id", Integer, unique=True, nullable=False),
+    Column("tmdb_id", Integer, unique=True, nullable=True),
+    Column("imdb_id", String(50), nullable=True),
+    
+    # Локализованные поля (русский)
+    Column("name", String(500), nullable=True),  # название на русском
+    Column("description", Text, nullable=True),  # описание на русском
+    Column("genres", JSONB, nullable=True),  # жанры на русском
+    Column("countries", JSONB, nullable=True),  # страны на русском
+    
+    # Локализованные поля (английский)
+    Column("title", String(500), nullable=True),  # название на английском
+    Column("overview", Text, nullable=True),  # описание на английском
+    Column("genres_tmdb", JSONB, nullable=True),  # жанры на английском
+    Column("origin_country", JSONB, nullable=True),  # страны на английском
+    
+    # Общие поля
+    Column("year", Integer, nullable=True),
+    Column("movie_length", Integer, nullable=True),
+    Column("rating_kp", Numeric(4, 3), CheckConstraint('rating_kp >= 0 AND rating_kp <= 10'), nullable=True),
+    Column("rating_imdb", Numeric(3, 1), CheckConstraint('rating_imdb >= 0 AND rating_imdb <= 10'), nullable=True),
+    Column("popularity_score", Numeric(10, 2), nullable=True),
+    
+    # Метаданные
+    Column("cast", JSONB, nullable=True),  # актеры
+    Column("directors", JSONB, nullable=True),  # режиссеры
+    Column("keywords", JSONB, nullable=True),  # ключевые слова
+    Column("page_content", Text, nullable=True),  # текстовое описание для поиска
+    
+    # Постеры и цвета фона
+    Column("kp_file_path", Text, nullable=True),  # путь к постеру из Кинопоиска
+    Column("kp_background_color", String(50), nullable=True),  # цвет фона из Кинопоиска
+    Column("tmdb_file_path", Text, nullable=True),  # путь к постеру из TMDB
+    Column("tmdb_background_color", String(50), nullable=True),  # цвет фона из TMDB
+    
+    # Временные метки
+    Column[datetime]("created_at", DateTime(timezone=True), server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 )
 
 def transactional(function):

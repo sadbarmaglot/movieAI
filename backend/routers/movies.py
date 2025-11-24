@@ -27,10 +27,13 @@ from clients.movie_agent import MovieAgent
 from db_managers import MovieManager
 from models import (
     MovieResponse,
+    MovieResponseRU,
+    MovieResponseEN,
     MovieStreamingRequest,
     QuestionStreamingRequest,
     AddSkippedRequest
 )
+from typing import Union
 from routers.dependencies import get_session, get_movie_manager
 from routers.auth import check_user_stars
 from settings import ATMOSPHERE_MAPPING
@@ -81,12 +84,17 @@ async def movies_streaming(
         favorites=body.favorites
     )
 
-@router.get("/get-movie", response_model=MovieResponse)
+@router.get("/get-movie", response_model=Union[MovieResponse, MovieResponseRU, MovieResponseEN])
 async def get_movie(
         movie_id: int,
+        platform: str = "telegram",  # 'telegram' or 'ios'
+        locale: str = "ru",  # 'ru' or 'en' - локализация (используется только для iOS)
         movie_manager: MovieManager = Depends(get_movie_manager)
 ):
-    return await movie_manager.get_by_kp_id(kp_id=movie_id)
+    if platform == "ios":
+        return await movie_manager.get_ios_movie_by_kp_id(kp_id=movie_id, locale=locale)
+    else:
+        return await movie_manager.get_by_kp_id(kp_id=movie_id)
 
 @router.get("/preview/{params}", response_class=HTMLResponse)
 async def preview_movie(
@@ -116,8 +124,22 @@ async def preview_movie(
 @router.post("/add-skipped")
 async def add_skipped_movie(
     body: AddSkippedRequest,
+    request: Request,
     movie_manager: MovieManager = Depends(get_movie_manager)
 ):
+    # Для iOS: убеждаемся, что фильм есть в ios_movies
+    if body.platform == "ios":
+        exists = await movie_manager.check_ios_movie_exists(body.movie_id)
+        if not exists:
+            # Получаем данные из Weaviate
+            recommender = request.app.state.recommender
+            weaviate_movie = await recommender.get_movie_by_kp_id(body.movie_id)
+            if weaviate_movie:
+                await movie_manager.ensure_ios_movie_from_weaviate(weaviate_movie)
+                logger.info(f"[add_skipped] Фильм kp_id={body.movie_id} добавлен в ios_movies из Weaviate")
+            else:
+                logger.warning(f"[add_skipped] Фильм kp_id={body.movie_id} не найден в Weaviate, пропускаем добавление в ios_movies")
+    
     await movie_manager.add_skipped_movies(
         user_id=body.user_id, 
         kp_id=body.movie_id,
@@ -130,9 +152,10 @@ async def _process_agent_results(
     agent: MovieAgent,
     user_input: str,
     add_user_message: bool,
-    last_tool_call_id_ref: dict
+    last_tool_call_id_ref: dict,
+    locale: str = "ru"
 ):
-    async for result in agent.run_qa(user_input=user_input, add_user_message=add_user_message):
+    async for result in agent.run_qa(user_input=user_input, add_user_message=add_user_message, locale=locale):
         if websocket.application_state != WebSocketState.CONNECTED:
             break
         await websocket.send_json(result)
@@ -149,6 +172,9 @@ async def _process_agent_results(
 async def movie_agent_qa_ws(websocket: WebSocket):
     await websocket.accept()
 
+    # Получить locale из первого сообщения или использовать дефолтный
+    locale = "ru"  # По умолчанию русский
+    
     agent = MovieAgent(
         openai_client=openai_client_base_async,
         kp_client=kp_client,
@@ -159,6 +185,10 @@ async def movie_agent_qa_ws(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+            
+            # Обновить locale из данных запроса
+            if "locale" in data:
+                locale = data["locale"]
 
             if "query" in data:
                 last_tool_call_id_ref["id"] = None
@@ -167,7 +197,8 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                     agent=agent,
                     user_input=data["query"],
                     add_user_message=True,
-                    last_tool_call_id_ref=last_tool_call_id_ref
+                    last_tool_call_id_ref=last_tool_call_id_ref,
+                    locale=locale
                 )
             elif "answer" in data:
                 if last_tool_call_id_ref["id"]:
@@ -186,7 +217,8 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                     agent=agent,
                     user_input=user_input,
                     add_user_message=add_user_message,
-                    last_tool_call_id_ref=last_tool_call_id_ref
+                    last_tool_call_id_ref=last_tool_call_id_ref,
+                    locale=locale
                 )
             else:
                 await websocket.send_json(
@@ -211,15 +243,22 @@ class BasePayload(TypedDict, total=False):
     action: str
     user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     platform: Optional[str]  # 'telegram' or 'ios'
+    locale: Optional[str]  # 'ru' or 'en' - локализация клиента
     query: Optional[str]
     genres: Optional[list[str]]
     atmospheres: Optional[list[str]]
     start_year: Optional[int]
     end_year: Optional[int]
+    movie_name: Optional[str]
+    source_kp_id: Optional[int]
+    rating_kp: Optional[float]
+    rating_imdb: Optional[float]
 
 
 async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: MovieAgent):
     platform = data.get("platform", "telegram")
+    locale = data.get("locale", "ru")  # Получаем локализацию из запроса
+    
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
         platform=platform,
@@ -227,7 +266,8 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
         genres=data.get("genres"),
         atmospheres=data.get("atmospheres"),
         start_year=data.get("start_year", 1900),
-        end_year=data.get("end_year", 2025)
+        end_year=data.get("end_year", 2025),
+        locale=locale
     ):
         if websocket.application_state != WebSocketState.CONNECTED:
             break
@@ -246,6 +286,8 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
         wv_query = ",".join([ATMOSPHERE_MAPPING[a] for a in atmospheres]) if atmospheres else None
 
     platform = data.get("platform", "telegram")
+    locale = data.get("locale", "ru")
+    
     async for movie in recommender.movie_generator(
         user_id=data["user_id"],
         platform=platform,
@@ -256,6 +298,7 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
         end_year=data.get("end_year", 2025),
         rating_kp=data.get("rating_kp", 5.0),
         rating_imdb=data.get("rating_imdb", 5.0),
+        locale=locale,
     ):
         await websocket.send_text(json.dumps(movie, ensure_ascii=False))
 
@@ -264,10 +307,13 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
 
 async def handle_similar_movie_streaming(websocket: WebSocket, data: dict, recommender: MovieWeaviateRecommender):
     platform = data.get("platform", "telegram")
+    locale = data.get("locale", "ru")  # Получаем локализацию из запроса
+    
     async for movie in recommender.movie_generator(
         user_id=data["user_id"],
         platform=platform,
         source_kp_id=data.get("source_kp_id"),
+        locale=locale,
     ):
         await websocket.send_text(json.dumps(movie, ensure_ascii=False))
 

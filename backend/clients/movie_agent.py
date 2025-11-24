@@ -10,19 +10,23 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
     ChatCompletionToolParam,
 )
-from typing import AsyncGenerator, List, Set, Optional
+from typing import AsyncGenerator, List, Set, Optional, Union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db_managers import AsyncSessionFactory, MovieManager
 from clients.kp_client import KinopoiskClient
 from clients.weaviate_client import MovieWeaviateRecommender
-from models import MovieObject
+from models import MovieObject, MovieResponseRU, MovieResponseEN
 from settings import (
     ATMOSPHERE_MAPPING,
     SYSTEM_PROMPT_AGENT,
+    SYSTEM_PROMPT_AGENT_RU,
+    SYSTEM_PROMPT_AGENT_EN,
     MODEL_QA,
     TOOLS_AGENT,
-    RERANK_PROMPT_TEMPLATE
+    RERANK_PROMPT_TEMPLATE_RU,
+    RERANK_PROMPT_TEMPLATE_EN,
+    DEFAULT_LOCALE
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +49,6 @@ class MovieAgent:
                  kp_client: KinopoiskClient,
                  recommender: MovieWeaviateRecommender,
                  system_prompt: str = SYSTEM_PROMPT_AGENT,
-                 rerank_prompt_template: str = RERANK_PROMPT_TEMPLATE,
                  tools: List[ChatCompletionToolParam] = TOOLS_AGENT,
                  model: str = MODEL_QA
                  ):
@@ -53,7 +56,6 @@ class MovieAgent:
         self.kp_client =kp_client
         self.recommender = recommender
         self.system_prompt = system_prompt
-        self.rerank_prompt_template = rerank_prompt_template
         self.tools = tools
         self.model = model
         self.messages: List[dict] = [
@@ -67,16 +69,26 @@ class MovieAgent:
             f"{i + 1}. {m['page_content'][:200]}" for i, m in enumerate(movies)
         )
 
-    async def _rerank_movies_streaming(self, query: str, movies: List[MovieObject]) -> AsyncGenerator[MovieObject, None]:
-        rerank_prompt = RERANK_PROMPT_TEMPLATE.format(
+    async def _rerank_movies_streaming(
+            self, 
+            query: str, 
+            movies: List[MovieObject],
+            locale: str = DEFAULT_LOCALE
+    ) -> AsyncGenerator[MovieObject, None]:
+        # Выбрать промпт в зависимости от локализации
+        rerank_template = RERANK_PROMPT_TEMPLATE_EN if locale == "en" else RERANK_PROMPT_TEMPLATE_RU
+        rerank_prompt = rerank_template.format(
             query=query,
             movies_list=self._format_movies_for_rerank(movies)
         )
 
+        # Выбрать системный промпт в зависимости от локализации
+        system_content = "You are a movie recommendation assistant." if locale == "en" else "Ты помощник по подбору фильмов."
+
         response = await self.openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                ChatCompletionSystemMessageParam(role="system", content="Ты помощник по подбору фильмов."),
+                ChatCompletionSystemMessageParam(role="system", content=system_content),
                 ChatCompletionUserMessageParam(role="user", content=rerank_prompt)
             ],
             stream=True,
@@ -112,14 +124,80 @@ class MovieAgent:
             self,
             movie: MovieObject,
             movie_manager: MovieManager,
-            session: AsyncSession
-    ) -> Optional[EnrichedMovieObject]:
-        kp_id = movie["kp_id"]
+            session: AsyncSession,
+            platform: str = "telegram",
+            locale: str = "ru"
+    ) -> Optional[Union[EnrichedMovieObject, MovieResponseRU, MovieResponseEN]]:
+        """
+        Обогащает фильм данными из БД или Kinopoisk API.
+        
+        Для iOS: возвращает MovieResponseRU или MovieResponseEN напрямую из Weaviate данных.
+        Для Telegram: возвращает EnrichedMovieObject из БД или Kinopoisk API (fallback).
+        """
+        kp_id = movie.get("kp_id")
         if not kp_id:
             return None
 
+        # Для iOS данные уже полные из Weaviate, преобразуем в MovieResponseRU/EN
+        if platform == "ios":
+            # movie уже содержит все данные из Weaviate (Movie_v2)
+            if locale == "en":
+                # Для английской локализации требуется tmdb_id (данные из TMDB)
+                if not movie.get("tmdb_id"):
+                    return None  # Пропускаем фильм без данных для английской локализации
+                
+                logger.info(f"[_enrich_movie] ✅ iOS EN: Возвращаем MovieResponseEN для kp_id={kp_id}, tmdb_id={movie.get('tmdb_id')}")
+                
+                # Преобразуем жанры и страны из списка строк в список словарей
+                genres_tmdb = movie.get("genres_tmdb", [])
+                genres = [{"name": g} for g in genres_tmdb] if genres_tmdb and isinstance(genres_tmdb[0], str) else genres_tmdb
+                
+                origin_country = movie.get("origin_country", [])
+                countries = [{"name": c} for c in origin_country] if origin_country and isinstance(origin_country[0], str) else origin_country
+                
+                return MovieResponseEN(
+                    movie_id=kp_id,
+                    imdb_id=movie.get("imdb_id"),
+                    title=movie.get("title", ""),  # только английское название
+                    overview=movie.get("overview", ""),  # только английское описание
+                    poster_url=movie.get("tmdb_file_path", ""),  # только постер из TMDB
+                    year=movie.get("year"),
+                    rating_kp=movie.get("rating_kp"),
+                    rating_imdb=movie.get("rating_imdb"),
+                    movie_length=movie.get("movieLength"),
+                    genres=genres,  # только английские жанры в формате [{"name": "..."}]
+                    countries=countries,  # только английские страны в формате [{"name": "..."}]
+                    background_color=movie.get("tmdb_background_color"),  # только цвет фона из TMDB
+                )
+            else:  # ru
+                # Преобразуем жанры и страны из списка строк в список словарей
+                genres_ru = movie.get("genres", [])
+                genres = [{"name": g} for g in genres_ru] if genres_ru and isinstance(genres_ru[0], str) else genres_ru
+                
+                countries_ru = movie.get("countries", [])
+                countries = [{"name": c} for c in countries_ru] if countries_ru and isinstance(countries_ru[0], str) else countries_ru
+                
+                return MovieResponseRU(
+                    movie_id=kp_id,
+                    name=movie.get("name", ""),  # только русское название
+                    title=movie.get("title", ""),  # английское название
+                    overview=movie.get("description", ""),  # только русское описание
+                    poster_url=movie.get("kp_file_path", ""),  # только постер из Кинопоиска
+                    year=movie.get("year"),
+                    rating_kp=movie.get("rating_kp"),
+                    rating_imdb=movie.get("rating_imdb"),
+                    movie_length=movie.get("movieLength"),
+                    genres=genres,  # только русские жанры в формате [{"name": "..."}]
+                    countries=countries,  # только русские страны в формате [{"name": "..."}]
+                    background_color=movie.get("kp_background_color"),  # только цвет фона из Кинопоиска
+                )
+
+        # Для Telegram получаем данные из БД или Kinopoisk API
         try:
-            db_movie = await asyncio.wait_for(movie_manager.get_by_kp_id(kp_id=kp_id), timeout=5)
+            db_movie = await asyncio.wait_for(
+                movie_manager.get_by_kp_id(kp_id=kp_id), 
+                timeout=5
+            )
             return EnrichedMovieObject(
                 movie_id=db_movie.movie_id,
                 title_ru=db_movie.title_ru,
@@ -133,6 +211,7 @@ class MovieAgent:
                 background_color=db_movie.background_color
             )
         except (HTTPException, asyncio.TimeoutError):
+            # Fallback на Kinopoisk API только для Telegram
             try:
                 kp_data = await asyncio.wait_for(self.kp_client.get_by_kp_id(kp_id=kp_id), timeout=5)
                 if not kp_data:
@@ -174,11 +253,21 @@ class MovieAgent:
     async def run_qa(
             self,
             user_input: str,
-            add_user_message: bool = True
+            add_user_message: bool = True,
+            locale: str = DEFAULT_LOCALE
     ) -> AsyncGenerator[dict, None]:
         """
         Диалог с пользователем: задаём вопросы, принимаем ответы.
+        
+        Args:
+            locale: 'ru' or 'en' - локализация для промпта и ответов
         """
+        # Обновить системный промпт в зависимости от локализации
+        if locale == "en":
+            self.messages[0] = {"role": "system", "content": SYSTEM_PROMPT_AGENT_EN}
+        else:
+            self.messages[0] = {"role": "system", "content": SYSTEM_PROMPT_AGENT_RU}
+        
         if user_input and add_user_message:
             self.messages.append({"role": "user", "content": user_input})
 
@@ -240,6 +329,7 @@ class MovieAgent:
             self,
             user_id,
             platform: str = "telegram",
+            locale: str = "ru",
             query: str = None,
             genres: list = None,
             atmospheres: list = None,
@@ -252,9 +342,19 @@ class MovieAgent:
         Args:
             user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
             platform: 'telegram' or 'ios'
+            locale: 'ru' or 'en' - локализация клиента
         """
+        # Инициализируем query пустой строкой, если он None
+        if query is None:
+            query = ""
+        
         if atmospheres is not None:
-            query += ", " + ", ".join(ATMOSPHERE_MAPPING.get(a, "") for a in atmospheres)
+            atmosphere_text = ", ".join(ATMOSPHERE_MAPPING.get(a, "") for a in atmospheres)
+            if atmosphere_text:
+                if query:
+                    query += ", " + atmosphere_text
+                else:
+                    query = atmosphere_text
 
         async with AsyncSessionFactory() as session:
             movie_manager = MovieManager(session)
@@ -269,14 +369,17 @@ class MovieAgent:
                 genres=genres,
                 start_year=start_year,
                 end_year=end_year,
-                exclude_kp_ids=exclude_set
+                exclude_kp_ids=exclude_set,
+                locale=locale
             )
 
-            async for movie in self._rerank_movies_streaming(query, movies):
+            async for movie in self._rerank_movies_streaming(query, movies, locale=locale):
                 enriched = await self._enrich_movie(
                     movie=movie,
                     movie_manager=movie_manager,
-                    session=session
+                    session=session,
+                    platform=platform,
+                    locale=locale
                 )
                 if enriched:
                     yield {"type": "movie", **enriched.model_dump()}

@@ -1,29 +1,26 @@
 import math
 import logging
-import asyncio
 
-from fastapi import HTTPException
 from typing import Optional, List, Set, AsyncGenerator
 from openai import AsyncOpenAI
-from sqlalchemy.ext.asyncio import AsyncSession
 from weaviate.connect import ConnectionParams
 from weaviate.classes.query import Filter
 from weaviate import WeaviateClient
 
 from clients.kp_client import KinopoiskClient
 from db_managers import AsyncSessionFactory, MovieManager
-from models import MovieObject
 from settings import (
     TOP_K_HYBRID,
     TOP_K_FETCH,
     TOP_K_SEARCH,
     TOP_K_SIMILAR,
-    WEAVITE_HOST_HTTP,
-    WEAVITE_HOST_GRPC,
-    WEAVITE_PORT_HTTP,
-    WEAVITE_PORT_GRPC,
+    WEAVIATE_HOST_HTTP,
+    WEAVIATE_HOST_GRPC,
+    WEAVIATE_PORT_HTTP,
+    WEAVIATE_PORT_GRPC,
     MODEL_EMBS,
-    CLASS_NAME
+    CLASS_NAME,
+    DEFAULT_LOCALE,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,11 +28,11 @@ logger = logging.getLogger(__name__)
 def load_vectorstore_weaviate() -> WeaviateClient:
     weaviate_client = WeaviateClient(
         connection_params=ConnectionParams.from_params(
-            http_host=WEAVITE_HOST_HTTP,
-            http_port=WEAVITE_PORT_HTTP,
+            http_host=WEAVIATE_HOST_HTTP,
+            http_port=WEAVIATE_PORT_HTTP,
             http_secure=False,
-            grpc_host=WEAVITE_HOST_GRPC,
-            grpc_port=WEAVITE_PORT_GRPC,
+            grpc_host=WEAVIATE_HOST_GRPC,
+            grpc_port=WEAVIATE_PORT_GRPC,
             grpc_secure=False,
         )
     )
@@ -62,54 +59,6 @@ class MovieWeaviateRecommender:
         self.model_name = model_name
         self.collection = weaviate_client.collections.get(collection)
 
-    @staticmethod
-    def _dynamic_score(item: dict) -> float:
-        """
-        Вычисляет составной скор фильма на основе рейтингов, голосов, свежести, жанров и страны производства.
-
-        Алгоритм учитывает:
-        - логарифмическое количество голосов с IMDb и Кинопоиска;
-        - рейтинги IMDb и Кинопоиска;
-        - свежесть фильма (снижение за старые фильмы, максимум в 2025 году);
-        - штраф за фильмы, которые одновременно являются 'аниме';
-        - фильтрацию стендап-комедий (снижение до 0, если жанр 'комедия' и найден текст стендапа);
-        - бонус за страны: Франция, Германия, Южная Корея, Испания, Аргентина, Бразилия.
-
-        Возвращает:
-            Округлённый скор фильма (float). Фильмы с нулевым или отрицательным скором исключаются.
-        """
-        rating_kp = item.get("rating_kp") or 0.0
-        rating_imdb = item.get("rating_imdb") or 0.0
-        votes_kp = item.get("votes_kp") or 0
-        votes_imdb = item.get("votes_imdb") or 0
-        year = item.get("year") or 2000
-        genres = [g.lower() for g in item.get("genres", [])]
-        countries = item.get("countries", []) or []
-        content = item.get("page_content", "").lower()
-
-        log_votes_imdb = math.log1p(votes_imdb)
-        log_votes_kp = math.log1p(votes_kp)
-
-        score = (
-            0.2 * log_votes_imdb +
-            0.05 * log_votes_kp +
-            0.4 * rating_imdb +
-            0.4 * rating_kp
-        )
-
-        freshness = max(0.0, 1.0 - (2025 - year) / 35)
-        score += 1.0 * freshness
-
-        if any(g in genres for g in ["аниме"]):
-            score *= 0.85
-
-        if genres == ["комедия"] and any(word in content for word in ["стендап", "stand-up", "выступлен"]):
-            return 0.0
-
-        if any(c in countries for c in ["франция", "германия", "южная корея", "испания", "аргентина", "бразилия"]):
-            score *= 1.1
-
-        return round(score, 2)
 
     @staticmethod
     def _skip_due_to_genre_conflict(movie_genres: List[str], selected_genres: List[str]) -> bool:
@@ -123,10 +72,57 @@ class MovieWeaviateRecommender:
 
     @classmethod
     def _return_properties(cls) -> List[str]:
+        """
+        Возвращает полный список свойств для запроса из Movie_v2.
+        Запрашиваем все поля (и русские, и английские) для упрощения логики.
+        """
         return [
-            "kp_id", "year", "genres", "countries", "rating_kp", "rating_imdb",
-            "votes_kp", "votes_imdb", "page_content"
+            "kp_id", "tmdb_id", "imdb_id", "year", "movieLength",
+            "rating_kp", "rating_imdb", "popularity_score",
+            "kp_file_path", "kp_background_color",
+            "tmdb_file_path", "tmdb_background_color",
+            "cast", "directors", "keywords", "page_content",
+            # Локализованные поля (русские)
+            "name", "description", "genres", "countries",
+            # Локализованные поля (английские)
+            "title", "overview", "genres_tmdb", "origin_country"
         ]
+
+    @staticmethod
+    def _weaviate_to_movie_dict(props: dict) -> dict:
+        """
+        Преобразует данные из Weaviate в унифицированный формат.
+        Возвращает все поля как есть, без разделения по локализации.
+        """
+        return {
+            "kp_id": props.get("kp_id"),
+            "tmdb_id": props.get("tmdb_id"),
+            "imdb_id": props.get("imdb_id"),
+            "year": props.get("year"),
+            "movieLength": props.get("movieLength"),
+            "rating_kp": props.get("rating_kp") or 0.0,
+            "rating_imdb": props.get("rating_imdb") or 0.0,
+            "popularity_score": props.get("popularity_score"),
+            "cast": props.get("cast", []),
+            "directors": props.get("directors", []),
+            "keywords": props.get("keywords", []),
+            "page_content": props.get("page_content", ""),
+            # Локализованные поля (русские)
+            "name": props.get("name", ""),
+            "description": props.get("description", ""),
+            "genres": props.get("genres", []),
+            "countries": props.get("countries", []),
+            # Локализованные поля (английские)
+            "title": props.get("title", ""),
+            "overview": props.get("overview", ""),
+            "genres_tmdb": props.get("genres_tmdb", []),
+            "origin_country": props.get("origin_country", []),
+            # Постеры и цвета фона
+            "kp_file_path": props.get("kp_file_path", ""),
+            "kp_background_color": props.get("kp_background_color"),
+            "tmdb_file_path": props.get("tmdb_file_path", ""),
+            "tmdb_background_color": props.get("tmdb_background_color"),
+        }
 
     async def _search_movies(
             self,
@@ -137,7 +133,7 @@ class MovieWeaviateRecommender:
             filters: Optional[Filter] = None,
             genres: Optional[List[str]] = None,
             exclude_kp_ids: Optional[Set] = None,
-    ) -> List[MovieObject]:
+    ) -> List[dict]:
         """
         Унифицированный метод поиска фильмов в Weaviate с гибридным (векторным + keyword) или фильтрационным запросом.
 
@@ -160,7 +156,7 @@ class MovieWeaviateRecommender:
             exclude_kp_ids (Optional[set]): множество `kp_id`, которые нужно исключить из результатов.
 
         Возвращает:
-            List[MovieObject]: отсортированный список фильмов, соответствующих запросу и фильтрам.
+            List[dict]: отсортированный список фильмов, соответствующих запросу и фильтрам.
         """
         try:
             if query:
@@ -194,21 +190,21 @@ class MovieWeaviateRecommender:
                 if kp_id in exclude_set:
                     continue
 
-                if genres and self._skip_due_to_genre_conflict(props.get("genres", []), genres):
-                    continue
+                movie_dict = self._weaviate_to_movie_dict(props)
+                
+                if genres:
+                    movie_genres = movie_dict.get("genres", [])
+                    if self._skip_due_to_genre_conflict(movie_genres, genres):
+                        continue
 
-                score = self._dynamic_score(props)
-                if score > 0:
-                    props["dynamic_score"] = score
-                    movies.append(props)
-
-            return sorted(movies, key=lambda x: x["dynamic_score"], reverse=True)[:result_limit]
+                movies.append(movie_dict)
+            return sorted(movies, key=lambda x: x.get("popularity_score") or 0.0, reverse=True)[:result_limit]
 
         except Exception as e:
             logger.warning(f"[MovieRAG] Ошибка в _search_movies: {e}")
             return []
 
-    async def search(self, query: str) -> List[MovieObject]:
+    async def search(self, query: str) -> List[dict]:
         """
         Выполняет гибридный поиск фильмов в Weaviate по заданному текстовому запросу (query).
         """
@@ -227,20 +223,24 @@ class MovieWeaviateRecommender:
         end_year: int = 2025,
         rating_kp: float = 0.0,
         rating_imdb: float = 0.0,
-        exclude_kp_ids: Optional[Set[int]] = None
-    ) -> List[MovieObject]:
+        exclude_kp_ids: Optional[Set[int]] = None,
+        locale: str = DEFAULT_LOCALE,
+    ) -> List[dict]:
         """
         Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
         с учётом жанров, годов, рейтингов и исключённых фильмов. Возвращает отсортированные результаты
-        по кастомному скору (_dynamic_score), с дополнительной фильтрацией по конфликту жанров.
+        по кастомному скору (popularity_score), с дополнительной фильтрацией по конфликту жанров.
         """
         filters = Filter.by_property("year").greater_than(start_year) & \
                   Filter.by_property("year").less_than(end_year) & \
                   Filter.by_property("rating_kp").greater_than(rating_kp) & \
                   Filter.by_property("rating_imdb").greater_than(rating_imdb)
 
-        if genres is not None:
-            filters = filters & Filter.by_property("genres").contains_all(genres)
+        if genres is not None and len(genres) > 0:
+            if locale == "en":
+                filters = filters & Filter.by_property("genres_tmdb").contains_any(genres)
+            else:
+                filters = filters & Filter.by_property("genres").contains_any(genres)
 
         return await self._search_movies(
             query=query,
@@ -252,12 +252,39 @@ class MovieWeaviateRecommender:
             exclude_kp_ids=exclude_kp_ids
         )
 
-    def recommend_similar(
+    async def get_movie_by_kp_id(self, kp_id: int) -> Optional[dict]:
+        """
+        Получает фильм из Weaviate по kp_id.
+        
+        Args:
+            kp_id: ID фильма на Кинопоиске
+            
+        Returns:
+            dict: данные фильма в формате из _weaviate_to_movie_dict или None если не найден
+        """
+        try:
+            result = self.collection.query.fetch_objects(
+                filters=Filter.by_property("kp_id").equal(kp_id),
+                limit=1,
+                return_properties=self._return_properties()
+            )
+            
+            if not result.objects:
+                logger.warning(f"[get_movie_by_kp_id] Фильм kp_id={kp_id} не найден в Weaviate")
+                return None
+            
+            props = result.objects[0].properties
+            return self._weaviate_to_movie_dict(props)
+        except Exception as e:
+            logger.warning(f"[get_movie_by_kp_id] Ошибка при получении фильма kp_id={kp_id}: {e}")
+            return None
+
+    async def recommend_similar(
             self,
             source_kp_id: int,
             penalty_weight: float = 0.15,
             exclude_kp_ids: Optional[Set[int]] = None,
-    ) -> List[MovieObject]:
+    ) -> List[dict]:
         """
         Ищет фильмы, похожие на заданный по `kp_id`, с переранжировкой по adjusted_distance.
 
@@ -272,12 +299,13 @@ class MovieWeaviateRecommender:
             penalty_weight (float): вес штрафа за низкий score.
 
         Возвращает:
-            List[MovieObject]: топ `limit` переранжированных фильмов.
+            List[dict]: топ `limit` переранжированных фильмов.
         """
         try:
             result = self.collection.query.fetch_objects(
                 filters=Filter.by_property("kp_id").equal(source_kp_id),
-                limit=1
+                limit=1,
+                return_properties=self._return_properties()
             )
 
             if not result.objects:
@@ -285,7 +313,9 @@ class MovieWeaviateRecommender:
 
             source_obj = result.objects[0]
             source_uuid = source_obj.uuid
-            source_genres = source_obj.properties.get("genres", [])
+            source_props = source_obj.properties
+            
+            source_genres = source_props.get("genres", [])
 
             response = self.collection.query.near_object(
                 near_object=source_uuid,
@@ -303,24 +333,26 @@ class MovieWeaviateRecommender:
                 if obj_kp_id == source_kp_id or obj_kp_id in exclude_set:
                     continue
 
-                movie_genres = props.get("genres", [])
+                movie_dict = self._weaviate_to_movie_dict(props)
+                movie_genres = movie_dict.get("genres", [])
+                
                 if self._skip_due_to_genre_conflict(movie_genres, source_genres):
                     continue
 
-                dynamic_score = self._dynamic_score(props)
+                dynamic_score = movie_dict.get("popularity_score") or 0.0
                 if dynamic_score <= 0:
                     continue
 
                 distance = obj.metadata.distance
                 adjusted_distance = distance * (1 + penalty_weight * math.log1p(10 - dynamic_score))
 
-                props.update({"adjusted_distance": adjusted_distance})
-                movies.append(props)
+                movie_dict["adjusted_distance"] = adjusted_distance
+                movies.append(movie_dict)
 
             return sorted(movies, key=lambda x: x["adjusted_distance"])[:100]
 
         except Exception as e:
-            logger.warning(f"[MovieRAG] Ошибка в recommend_reranked_by_kp_id: {e}")
+            logger.warning(f"[MovieRAG] Ошибка в recommend_similar: {e}")
             return []
 
     @staticmethod
@@ -332,41 +364,6 @@ class MovieWeaviateRecommender:
         skipped = await movie_manager.get_skipped(user_id, platform=platform)
         favorites = await movie_manager.get_favorites(user_id, platform=platform)
         return set(skipped + favorites)
-
-    async def _get_or_fetch_movie(
-            self,
-            kp_id: int,
-            session: AsyncSession,
-            movie_manager: MovieManager
-    ) -> Optional[dict]:
-        """
-        Получает фильм по kp_id: сначала из БД, при отсутствии — из Kinopoisk API.
-        Возвращает сериализованный словарь, либо None при ошибке.
-        """
-        try:
-            movie_response = await asyncio.wait_for(
-                movie_manager.get_by_kp_id(kp_id=kp_id), timeout=5
-            )
-            movie = movie_response.model_dump()
-            movie["poster_url"] = movie.get("poster_url")
-            movie["movie_id"] = movie.get("movie_id")
-            return movie
-        except (HTTPException, asyncio.TimeoutError):
-            try:
-                movie_details = await asyncio.wait_for(
-                    self.kp_client.get_by_kp_id(kp_id=kp_id), timeout=5
-                )
-                if not movie_details:
-                    return None
-                await movie_manager.insert_movies([movie_details])
-                await session.commit()
-                movie = movie_details.model_dump()
-                movie["poster_url"] = movie_details.google_cloud_url
-                movie["movie_id"] = movie_details.kp_id
-                return movie
-            except asyncio.TimeoutError:
-                logger.warning(f"⏱️ Таймаут kp_id={kp_id}")
-                return None
 
     async def movie_generator(
             self,
@@ -380,14 +377,16 @@ class MovieWeaviateRecommender:
             end_year: int = 2025,
             rating_kp: float = 5.0,
             rating_imdb: float = 5.0,
+            locale: str = DEFAULT_LOCALE,
     ) -> AsyncGenerator[dict, None]:
         """
-        Асинхронный генератор фильмов, отбираемых с учётом фильтров, истории пользователя и Weaviate/Кинопоиск.
+        Асинхронный генератор фильмов, отбираемых с учётом фильтров, истории пользователя и Weaviate.
 
         Алгоритм:
         - Если задан `movie_name`, выполняется поиск по названию (через `self.search`).
         - Если задан `source_kp_id`, выполняется поиск похожих на фильм с source_kp_id (через `self.recommend_similar`).
         - Иначе используется метод `recommend`, исключая фильмы из пропущенных и избранных пользователя.
+        - Все данные берутся из Weaviate (Movie_v2), без обращения к внешним API.
 
         Параметры:
             user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
@@ -421,7 +420,7 @@ class MovieWeaviateRecommender:
             if movie_name is not None:
                 movies = await self.search(query=movie_name)
             elif source_kp_id is not None:
-                movies=self.recommend_similar(
+                movies = await self.recommend_similar(
                     source_kp_id=source_kp_id,
                     exclude_kp_ids=exclude_set
                 )
@@ -433,10 +432,43 @@ class MovieWeaviateRecommender:
                     end_year=end_year,
                     rating_kp=rating_kp,
                     rating_imdb=rating_imdb,
-                    exclude_kp_ids=exclude_set
+                    exclude_kp_ids=exclude_set,
+                    locale=locale
                 )
 
             for movie in movies:
-                kp_id = movie.get("kp_id")
-                if kp_id and (result := await self._get_or_fetch_movie(kp_id, session, movie_manager)):
-                    yield result
+                if locale == "en":
+                    genres = movie.get("genres_tmdb", [])
+                    countries = movie.get("origin_country", [])
+                    
+                    yield {
+                        "movie_id": movie.get("kp_id"),
+                        "title": movie.get("title"),
+                        "overview": movie.get("overview"),
+                        "poster_url": movie.get("tmdb_file_path"),
+                        "year": movie.get("year"),
+                        "rating_kp": movie.get("rating_kp"),
+                        "rating_imdb": movie.get("rating_imdb"),
+                        "movie_length": movie.get("movieLength"),
+                        "genres": [{"name": g} for g in genres] if genres else [],
+                        "countries": [{"name": c} for c in countries] if countries else [],
+                        "background_color": movie.get("tmdb_background_color")
+                    }
+                else:  # ru
+                    genres = movie.get("genres", [])
+                    countries = movie.get("countries", [])
+                    
+                    yield {
+                        "movie_id": movie.get("kp_id"),
+                        "name": movie.get("name"),  # русское название
+                        "title": movie.get("title", ""),  # английское название
+                        "overview": movie.get("description"),
+                        "poster_url": movie.get("kp_file_path"),
+                        "year": movie.get("year"),
+                        "rating_kp": movie.get("rating_kp"),
+                        "rating_imdb": movie.get("rating_imdb"),
+                        "movie_length": movie.get("movieLength"),
+                        "genres": [{"name": g} for g in genres] if genres else [],
+                        "countries": [{"name": c} for c in countries] if countries else [],
+                        "background_color": movie.get("kp_background_color")
+                    }

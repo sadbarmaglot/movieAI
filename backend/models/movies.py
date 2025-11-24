@@ -15,6 +15,7 @@ class QuestionStreamingRequest(BaseModel):
 class MovieStreamingRequest(BaseModel):
     user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
+    locale: Optional[str] = "ru"  # 'ru' or 'en' - локализация клиента
     chat_answers: List[ChatQA] = None
     categories: Optional[List[str]] = None
     atmospheres: Optional[List[str]] = None
@@ -27,6 +28,7 @@ class MovieStreamingRequest(BaseModel):
 
 
 class MovieDetails(BaseModel):
+    """Базовая модель данных фильма для Telegram (старая схема)"""
     kp_id: int
     tmdb_id: Optional[int] = None
     title_gpt: str = ""
@@ -60,7 +62,46 @@ class MovieDetails(BaseModel):
         )
 
 
+class MovieDetailsIOS(BaseModel):
+    """Модель данных фильма для iOS с расширенными метаданными (Movie_v2 schema)"""
+    # Основные идентификаторы
+    kp_id: int
+    tmdb_id: Optional[int] = None
+    imdb_id: Optional[str] = None
+    
+    # Локализованные поля (русский)
+    name: str  # название на русском
+    description: str # описание на русском
+    genres: List[dict] # жанры на русском
+    countries: List[dict]  # страны на русском
+    
+    # Локализованные поля (английский)
+    title: Optional[str] = None  # название на английском
+    overview: Optional[str] = None  # описание на английском
+    genres_tmdb: Optional[List[dict]] = None  # жанры на английском
+    origin_country: Optional[List[dict]] = None  # страны на английском
+    
+    # Общие поля
+    year: int
+    movie_length: Optional[int] = None
+    rating_kp: Optional[float] = None
+    rating_imdb: Optional[float] = None
+    popularity_score: Optional[float] = None
+    
+    # Метаданные
+    cast: Optional[List[str]] = None  # актеры
+    directors: Optional[List[str]] = None  # режиссеры
+    keywords: Optional[List[str]] = None  # ключевые слова
+    
+    # Постеры и цвета фона
+    kp_file_path: Optional[str] = None  # путь к постеру из Кинопоиска
+    kp_background_color: Optional[str] = None  # цвет фона из Кинопоиска
+    tmdb_file_path: Optional[str] = None  # путь к постеру из TMDB
+    tmdb_background_color: Optional[str] = None  # цвет фона из TMDB
+
+
 class MovieResponse(BaseModel):
+    """Базовая модель ответа фильма (для обратной совместимости с Telegram)"""
     movie_id: int
     title_alt: str
     title_ru: str
@@ -92,6 +133,42 @@ class MovieResponse(BaseModel):
         )
 
 
+class MovieResponseRU(BaseModel):
+    """Модель ответа фильма для русской локализации"""
+    movie_id: int # kp_id
+    name: str
+    title: str # название на английском
+    overview: str  # описание на русском
+    poster_url: str
+    year: int
+    rating_kp: Optional[float] = None
+    rating_imdb: Optional[float] = None
+    movie_length: Optional[int] = None
+    genres: Optional[List[dict]] = None
+    countries: Optional[List[dict]] = None
+    background_color: Optional[str]
+
+
+class MovieResponseEN(BaseModel):
+    """Модель ответа фильма для английской локализации"""
+    movie_id: int # kp_id
+    imdb_id: Optional[str] = None
+    title: str
+    overview: str
+    poster_url: str
+    year: int
+    rating_kp: Optional[float] = None
+    rating_imdb: Optional[float] = None
+    movie_length: Optional[int] = None
+    genres: Optional[List[dict]] = None
+    countries: Optional[List[dict]] = None
+    background_color: Optional[str]
+
+
+# Union тип для типизации
+MovieResponseLocalized = Union[MovieResponseRU, MovieResponseEN]
+
+
 class AddSkippedRequest(BaseModel):
     user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     movie_id: int
@@ -106,3 +183,31 @@ class MovieObject(TypedDict):
     rating_kp: float
     rating_imdb: float
     page_content: str
+
+
+# Новая модель для Movie_v2 с расширенными метаданными
+class MovieObjectV2(TypedDict, total=False):
+    kp_id: int
+    tmdb_id: Optional[int]
+    imdb_id: Optional[str]
+    name: Optional[str]  # название на русском
+    title: Optional[str]  # название на английском
+    year: int
+    description: Optional[str]  # описание на русском
+    overview: Optional[str]  # описание на английском
+    movieLength: Optional[int]
+    genres: Optional[List[str]]  # жанры на русском
+    genres_tmdb: Optional[List[str]]  # жанры на английском
+    countries: Optional[List[str]]  # страны на русском
+    origin_country: Optional[List[str]]  # страны на английском
+    cast: Optional[List[str]]
+    directors: Optional[List[str]]
+    keywords: Optional[List[str]]
+    page_content: Optional[str]
+    rating_kp: Optional[float]
+    rating_imdb: Optional[float]
+    kp_file_path: Optional[str]
+    kp_background_color: Optional[str]
+    tmdb_file_path: Optional[str]
+    tmdb_background_color: Optional[str]
+    popularity_score: Optional[float]

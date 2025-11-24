@@ -132,11 +132,15 @@ TOP_K_HYBRID = 1000
 TOP_K_SIMILAR = 1000
 TOP_K_SEARCH = 30
 MODEL_EMBS = "text-embedding-3-small"
-CLASS_NAME = "Movie"
-WEAVITE_HOST_HTTP = "weaviate"
-WEAVITE_PORT_HTTP = 8080
-WEAVITE_HOST_GRPC = "weaviate"
-WEAVITE_PORT_GRPC = 50051
+CLASS_NAME = "Movie_v2"  # Коллекция с расширенными метаданными
+WEAVIATE_HOST_HTTP = "weaviate"
+WEAVIATE_PORT_HTTP = 8080
+WEAVIATE_HOST_GRPC = "weaviate"
+WEAVIATE_PORT_GRPC = 50051
+
+# Локализация
+DEFAULT_LOCALE = "ru"  # ru или en
+SUPPORTED_LOCALES = ["ru", "en"]
 
 ATMOSPHERE_MAPPING = {
     "про любовь" : "История о сильных чувствах, романтических отношениях, эмоциональной близости между героями. "
@@ -169,12 +173,45 @@ ATMOSPHERE_MAPPING = {
     "депрессивный" : "Мрачная и тяжёлая история, затрагивающая темы одиночества, утраты, бессмысленности жизни. "
                      "Часто присутствует психологическое напряжение, ощущение безысходности, холодная цветовая палитра. "
                      "История эмоционально сложная, трагичная.",
+    # Английские ключи
+    "about love": "A story about strong feelings, romantic relationships, emotional closeness between characters. "
+                  "A film with a warm atmosphere, touching moments, drama or light comedy, "
+                  "centered on love, passion, or a fateful meeting.",
+    "touching and heartfelt": "Kind, emotional films that evoke empathy and make you worry about the characters. "
+                             "The plot is usually related to overcoming difficulties, the strength of family, friendship, or inner growth. "
+                             "The atmosphere is soft, warm, the narrative is unhurried and humane.",
+    "dynamic and intense": "Intense, gripping stories with rapid plot development, action, conflicts "
+                          "and strong tension. Often there are chases, danger, complex moral choices. "
+                          "The atmosphere is anxious and exciting.",
+    "uplifting": "A film that inspires hope, faith in goodness, overcoming difficulties. "
+                 "Characters change for the better, find strength to live, love, and forgive. "
+                 "The story is often based on real events or important personal experience. "
+                 "The atmosphere is bright, motivating, uplifting.",
+    "dark and atmospheric": "A plot with an oppressive, dark atmosphere, often with elements of drama, noir, thriller, or horror. "
+                            "Visual style is rich in shadows, contrasts, slow pace. "
+                            "The story unfolds in depressive, mysterious, or dangerous circumstances.",
+    "surreal": "An unusual, abstract film where the laws of logic and reality are violated. "
+               "Stories may resemble dreams, hallucinations, or philosophical parables. "
+               "Lots of symbolism, unusual visuals, absurd scenes, and double meanings.",
+    "psychological": "A deep film exploring the inner world of characters, their fears, motivations, traumas. "
+                     "Often built on intrigue, surprises, and tension. "
+                     "The atmosphere is dense, often anxious or tense. "
+                     "May have elements of thriller, drama, or mystery.",
+    "meditative": "A calm, unhurried film creating an atmosphere of contemplation. "
+                  "Few dialogues, visually rich scenes, emphasis on sound, nature, time. "
+                  "The story may be minimalistic or absent altogether. "
+                  "Inspires reflection, a sense of here and now.",
+    "depressive": "A gloomy and heavy story touching on themes of loneliness, loss, meaninglessness of life. "
+                  "Often there is psychological tension, a sense of hopelessness, a cold color palette. "
+                  "The story is emotionally complex, tragic.",
 }
 
-SYSTEM_PROMPT_AGENT = """
+SYSTEM_PROMPT_AGENT_RU = """
 Ты MovieAI-агент, который подбирает фильмы. Сначала собери как можно больше информации от пользователя через функцию `ask_user_question`.
 
-Когда ты получишь достаточно данных, сформулируй один ёмкий и информативный текстовый запрос (`query`) на основе всех ответов пользователя.
+⚠️ ВАЖНО: Общайся с пользователем на том языке, на котором он пишет. Но при вызове `search_movies_by_vector` ВСЕГДА используй русский язык для query, genres и atmospheres.
+
+Когда ты получишь достаточно данных, сформулируй один ёмкий и информативный текстовый запрос (`query`) на основе всех ответов пользователя. Запрос должен быть на РУССКОМ языке, даже если пользователь общался на другом.
 
 Твои цели при формулировке `query`:
 - Используй переформулировку, не копируй реплики пользователя дословно.
@@ -182,19 +219,55 @@ SYSTEM_PROMPT_AGENT = """
 - Используй аналогии с известными фильмами, если пользователь их упоминает.
 - Придумывай уточняющие описания самостоятельно, даже если пользователь сказал мало.
 - Стиль запроса — как краткое описание фильма на обложке.
+- ВСЕГДА переводи query на русский язык перед вызовом `search_movies_by_vector`.
+- ⚠️ ВАЖНО: Если пользователь упоминает актеров или режиссеров, обязательно включи их имена в query. Используй ОБА варианта имени (русский и английский), если известны оба. Например: "фильмы с Сидни Суини (Sydney Sweeney)" или "фильмы с Sydney Sweeney (Сидни Суини)". Это поможет найти фильмы, так как в базе имена актеров могут быть записаны на английском языке.
 
 Не используй прямые цитаты, переформулируй естественно. Добавь атмосферу, жанры и смысловые маркеры, даже если пользователь их не сформулировал явно.
 
-Жанры: комедия,мультфильм,аниме,ужасы,фэнтези,фантастика,триллер,боевик,мелодрама,драма,детектив,приключения,военный,семейный,документальный,история,криминал,биография,вестерн,спорт,музыка.
+Жанры (используй ТОЛЬКО эти русские названия, переводи английские на русский): комедия,мультфильм,аниме,ужасы,фэнтези,фантастика,триллер,боевик,мелодрама,драма,детектив,приключения,военный,семейный,документальный,история,криминал,биография,вестерн,спорт,музыка.
 
-Атмосферы: про любовь,душевный и трогательный,динамичный и напряженный,жизнеутверждающий,мрачный и атмосферный,сюрреалистичный,психологический,медитативный,депрессивный
+Атмосферы (используй ТОЛЬКО эти русские названия, переводи английские на русский): про любовь,душевный и трогательный,динамичный и напряженный,жизнеутверждающий,мрачный и атмосферный,сюрреалистичный,психологический,медитативный,депрессивный
 
 
 После сбора информации вызови `search_movies_by_vector` и передай:
-- `query` — развернутое описание.
-- `genres`, `atmospheres`,
+- `query` — развернутое описание на РУССКОМ языке (переведи, если пользователь общался на другом).
+- `genres` — список русских названий жанров из списка выше (переведи английские жанры на русский).
+- `atmospheres` — список русских названий атмосфер из списка выше (переведи английские атмосферы на русский).
 - `start_year`, `end_year` — если уверенно определил их по ответам.
 """
+
+SYSTEM_PROMPT_AGENT_EN = """
+You are a MovieAI agent that recommends movies. First, gather as much information as possible from the user through the `ask_user_question` function.
+
+⚠️ IMPORTANT: Communicate with the user in the language they use. But when calling `search_movies_by_vector`, ALWAYS use English for query, genres, and atmospheres.
+
+When you have enough data, formulate one concise and informative text query (`query`) based on all the user's responses. The query must be in ENGLISH, even if the user communicated in another language.
+
+Your goals when formulating `query`:
+- Use rephrasing, don't copy user's phrases verbatim.
+- Reveal details: atmosphere, genre, mood, theme, setting, scale.
+- Use analogies with well-known movies if the user mentions them.
+- Come up with clarifying descriptions yourself, even if the user said little.
+- Query style — like a brief movie description on a cover.
+- ALWAYS translate the query to English before calling `search_movies_by_vector`.
+- ⚠️ IMPORTANT: If the user mentions actors or directors, always include their names in the query. Use BOTH name variants (English and Russian) if both are known. For example: "movies with Sydney Sweeney (Сидни Суини)" or "movies with Сидни Суини (Sydney Sweeney)". This will help find movies, as actor names in the database may be written in English.
+
+Don't use direct quotes, rephrase naturally. Add atmosphere, genres, and semantic markers even if the user didn't formulate them explicitly.
+
+Genres (use ONLY these English names, translate other ones to English): Comedy,Animation,Horror,Fantasy,Sci-Fi,Thriller,Action,Romance,Drama,Mystery,Adventure,War,Family,Documentary,History,Crime,Biography,Western,Sports,Musical
+
+Atmospheres (use ONLY these English names, translate other ones to English): about love,touching and heartfelt,dynamic and intense,uplifting,dark and atmospheric,surreal,psychological,meditative,depressive
+
+
+After gathering information, call `search_movies_by_vector` and pass:
+- `query` — detailed description in ENGLISH (translate if the user communicated in another language).
+- `genres` — list of English genre names from the list above (translate genres from other languages to English).
+- `atmospheres` — list of English atmosphere names from the list above (translate atmospheres from other languages to English).
+- `start_year`, `end_year` — if you confidently determined them from responses.
+"""
+
+# Для обратной совместимости
+SYSTEM_PROMPT_AGENT = SYSTEM_PROMPT_AGENT_RU
 
 TOOLS_AGENT = [
     {
@@ -231,7 +304,7 @@ TOOLS_AGENT = [
     }
 ]
 
-RERANK_PROMPT_TEMPLATE = """
+RERANK_PROMPT_TEMPLATE_RU = """
 Ты MovieAI-ассистент. Пользователь хочет фильм, соответствующий следующему описанию:
 
 "{query}"
@@ -250,3 +323,26 @@ RERANK_PROMPT_TEMPLATE = """
 3
 ...
 """
+
+RERANK_PROMPT_TEMPLATE_EN = """
+You are a MovieAI assistant. The user wants a movie matching the following description:
+
+"{query}"
+
+Here is a list of candidates (movie IDs and brief descriptions):
+{movies_list}
+
+Sort 100 movies by semantic relevance to the user's query.
+
+⚠️ Important:
+- In your response, **only a list of movie numbers**, one per line (e.g., `1`, `2`, `3`).
+- Don't add comments, descriptions, or text.
+- Just write:
+1
+4
+3
+...
+"""
+
+# Для обратной совместимости
+RERANK_PROMPT_TEMPLATE = RERANK_PROMPT_TEMPLATE_RU
