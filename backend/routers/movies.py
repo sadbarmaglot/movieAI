@@ -27,8 +27,7 @@ from clients.movie_agent import MovieAgent
 from db_managers import MovieManager
 from models import (
     MovieResponse,
-    MovieResponseRU,
-    MovieResponseEN,
+    MovieResponseLocalized,
     MovieStreamingRequest,
     QuestionStreamingRequest,
     AddSkippedRequest
@@ -84,15 +83,14 @@ async def movies_streaming(
         favorites=body.favorites
     )
 
-@router.get("/get-movie", response_model=Union[MovieResponse, MovieResponseRU, MovieResponseEN])
+@router.get("/get-movie", response_model=Union[MovieResponse, MovieResponseLocalized])
 async def get_movie(
         movie_id: int,
         platform: str = "telegram",  # 'telegram' or 'ios'
-        locale: str = "ru",  # 'ru' or 'en' - локализация (используется только для iOS)
         movie_manager: MovieManager = Depends(get_movie_manager)
 ):
     if platform == "ios":
-        return await movie_manager.get_ios_movie_by_kp_id(kp_id=movie_id, locale=locale)
+        return await movie_manager.get_ios_movie_by_kp_id(kp_id=movie_id)
     else:
         return await movie_manager.get_by_kp_id(kp_id=movie_id)
 

@@ -133,40 +133,33 @@ class MovieResponse(BaseModel):
         )
 
 
-class MovieResponseRU(BaseModel):
-    """Модель ответа фильма для русской локализации"""
-    movie_id: int # kp_id
-    name: str
-    title: str # название на английском
-    overview: str  # описание на русском
-    poster_url: str
-    year: int
-    rating_kp: Optional[float] = None
-    rating_imdb: Optional[float] = None
-    movie_length: Optional[int] = None
-    genres: Optional[List[dict]] = None
-    countries: Optional[List[dict]] = None
-    background_color: Optional[str]
-
-
-class MovieResponseEN(BaseModel):
-    """Модель ответа фильма для английской локализации"""
-    movie_id: int # kp_id
+class MovieResponseLocalized(BaseModel):
+    """Объединенная модель ответа фильма с данными для обеих локализаций (RU и EN)"""
+    movie_id: int  # kp_id
     imdb_id: Optional[str] = None
-    title: str
-    overview: str
-    poster_url: str
+    
+    # Русская локализация
+    name: Optional[str] = None  # название на русском
+    overview_ru: Optional[str] = None  # описание на русском
+    genres_ru: Optional[List[dict]] = None  # жанры на русском
+    countries_ru: Optional[List[dict]] = None  # страны на русском
+    poster_url_kp: Optional[str] = None  # постер из Кинопоиска
+    background_color_kp: Optional[str] = None  # цвет фона из Кинопоиска
+    
+    # Английская локализация
+    title: str  # название на английском
+    overview_en: Optional[str] = None  # описание на английском
+    genres_en: Optional[List[dict]] = None  # жанры на английском
+    countries_en: Optional[List[dict]] = None  # страны на английском
+    poster_url_tmdb: Optional[str] = None  # постер из TMDB
+    background_color_tmdb: Optional[str] = None  # цвет фона из TMDB
+    
+    # Общие поля
     year: int
     rating_kp: Optional[float] = None
     rating_imdb: Optional[float] = None
     movie_length: Optional[int] = None
-    genres: Optional[List[dict]] = None
-    countries: Optional[List[dict]] = None
-    background_color: Optional[str]
 
-
-# Union тип для типизации
-MovieResponseLocalized = Union[MovieResponseRU, MovieResponseEN]
 
 
 class AddSkippedRequest(BaseModel):

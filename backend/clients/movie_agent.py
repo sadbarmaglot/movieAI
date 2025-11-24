@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db_managers import AsyncSessionFactory, MovieManager
 from clients.kp_client import KinopoiskClient
 from clients.weaviate_client import MovieWeaviateRecommender
-from models import MovieObject, MovieResponseRU, MovieResponseEN
+from models import MovieObject, MovieResponseLocalized
 from settings import (
     ATMOSPHERE_MAPPING,
     SYSTEM_PROMPT_AGENT,
@@ -127,70 +127,63 @@ class MovieAgent:
             session: AsyncSession,
             platform: str = "telegram",
             locale: str = "ru"
-    ) -> Optional[Union[EnrichedMovieObject, MovieResponseRU, MovieResponseEN]]:
+    ) -> Optional[Union[EnrichedMovieObject, MovieResponseLocalized]]:
         """
         Обогащает фильм данными из БД или Kinopoisk API.
         
-        Для iOS: возвращает MovieResponseRU или MovieResponseEN напрямую из Weaviate данных.
+        Для iOS: возвращает MovieResponseLocalized напрямую из Weaviate данных (с данными для обеих локализаций).
         Для Telegram: возвращает EnrichedMovieObject из БД или Kinopoisk API (fallback).
+        
+        Args:
+            locale: используется только для диалога с пользователем, не влияет на возвращаемые данные
         """
         kp_id = movie.get("kp_id")
         if not kp_id:
             return None
 
-        # Для iOS данные уже полные из Weaviate, преобразуем в MovieResponseRU/EN
+        # Для iOS данные уже полные из Weaviate, преобразуем в MovieResponseLocalized
         if platform == "ios":
             # movie уже содержит все данные из Weaviate (Movie_v2)
+            
+            # Для английской локализации требуется tmdb_id (данные из TMDB)
             if locale == "en":
-                # Для английской локализации требуется tmdb_id (данные из TMDB)
                 if not movie.get("tmdb_id"):
                     return None  # Пропускаем фильм без данных для английской локализации
                 
-                logger.info(f"[_enrich_movie] ✅ iOS EN: Возвращаем MovieResponseEN для kp_id={kp_id}, tmdb_id={movie.get('tmdb_id')}")
-                
-                # Преобразуем жанры и страны из списка строк в список словарей
-                genres_tmdb = movie.get("genres_tmdb", [])
-                genres = [{"name": g} for g in genres_tmdb] if genres_tmdb and isinstance(genres_tmdb[0], str) else genres_tmdb
-                
-                origin_country = movie.get("origin_country", [])
-                countries = [{"name": c} for c in origin_country] if origin_country and isinstance(origin_country[0], str) else origin_country
-                
-                return MovieResponseEN(
-                    movie_id=kp_id,
-                    imdb_id=movie.get("imdb_id"),
-                    title=movie.get("title", ""),  # только английское название
-                    overview=movie.get("overview", ""),  # только английское описание
-                    poster_url=movie.get("tmdb_file_path", ""),  # только постер из TMDB
-                    year=movie.get("year"),
-                    rating_kp=movie.get("rating_kp"),
-                    rating_imdb=movie.get("rating_imdb"),
-                    movie_length=movie.get("movieLength"),
-                    genres=genres,  # только английские жанры в формате [{"name": "..."}]
-                    countries=countries,  # только английские страны в формате [{"name": "..."}]
-                    background_color=movie.get("tmdb_background_color"),  # только цвет фона из TMDB
-                )
-            else:  # ru
-                # Преобразуем жанры и страны из списка строк в список словарей
-                genres_ru = movie.get("genres", [])
-                genres = [{"name": g} for g in genres_ru] if genres_ru and isinstance(genres_ru[0], str) else genres_ru
-                
-                countries_ru = movie.get("countries", [])
-                countries = [{"name": c} for c in countries_ru] if countries_ru and isinstance(countries_ru[0], str) else countries_ru
-                
-                return MovieResponseRU(
-                    movie_id=kp_id,
-                    name=movie.get("name", ""),  # только русское название
-                    title=movie.get("title", ""),  # английское название
-                    overview=movie.get("description", ""),  # только русское описание
-                    poster_url=movie.get("kp_file_path", ""),  # только постер из Кинопоиска
-                    year=movie.get("year"),
-                    rating_kp=movie.get("rating_kp"),
-                    rating_imdb=movie.get("rating_imdb"),
-                    movie_length=movie.get("movieLength"),
-                    genres=genres,  # только русские жанры в формате [{"name": "..."}]
-                    countries=countries,  # только русские страны в формате [{"name": "..."}]
-                    background_color=movie.get("kp_background_color"),  # только цвет фона из Кинопоиска
-                )
+            # Преобразуем жанры и страны из списка строк в список словарей для русской локализации
+            genres_ru = movie.get("genres", [])
+            genres_ru_dict = [{"name": g} for g in genres_ru] if genres_ru and isinstance(genres_ru[0], str) else (genres_ru or [])
+            
+            countries_ru = movie.get("countries", [])
+            countries_ru_dict = [{"name": c} for c in countries_ru] if countries_ru and isinstance(countries_ru[0], str) else (countries_ru or [])
+            
+            # Преобразуем жанры и страны из списка строк в список словарей для английской локализации
+            genres_tmdb = movie.get("genres_tmdb", [])
+            genres_en_dict = [{"name": g} for g in genres_tmdb] if genres_tmdb and isinstance(genres_tmdb[0], str) else (genres_tmdb or [])
+            
+            origin_country = movie.get("origin_country", [])
+            countries_en_dict = [{"name": c} for c in origin_country] if origin_country and isinstance(origin_country[0], str) else (origin_country or [])
+            
+            return MovieResponseLocalized(
+                movie_id=kp_id,
+                imdb_id=movie.get("imdb_id"),
+                name=movie.get("name", ""),
+                title=movie.get("title", ""),
+                overview_ru=movie.get("description", ""),
+                overview_en=movie.get("overview", ""),
+                poster_url_kp=movie.get("kp_file_path", ""),
+                poster_url_tmdb=movie.get("tmdb_file_path", ""),
+                year=movie.get("year"),
+                rating_kp=movie.get("rating_kp"),
+                rating_imdb=movie.get("rating_imdb"),
+                movie_length=movie.get("movieLength"),
+                genres_ru=genres_ru_dict,
+                genres_en=genres_en_dict,
+                countries_ru=countries_ru_dict,
+                countries_en=countries_en_dict,
+                background_color_kp=movie.get("kp_background_color"),
+                background_color_tmdb=movie.get("tmdb_background_color"),
+            )
 
         # Для Telegram получаем данные из БД или Kinopoisk API
         try:

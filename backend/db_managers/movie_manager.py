@@ -15,7 +15,7 @@ from db_managers.base import (
     read_only,
     transactional
 )
-from models import MovieResponse, MovieResponseRU, MovieResponseEN, MovieDetails, MovieDetailsIOS
+from models import MovieResponse, MovieResponseLocalized, MovieDetails, MovieDetailsIOS
 
 
 logger = logging.getLogger(__name__)
@@ -71,14 +71,12 @@ class MovieManager(BaseManager):
     @read_only
     async def get_ios_movie_by_kp_id(
         self, 
-        kp_id: int, 
-        locale: str = "ru"
-    ) -> Union[MovieResponseRU, MovieResponseEN]:
+        kp_id: int
+    ) -> MovieResponseLocalized:
         """
         Получает фильм по kp_id из таблицы ios_movies для iOS.
-        Возвращает разные модели ответа в зависимости от локализации.
+        Возвращает объединенную модель с данными для обеих локализаций.
         :param kp_id: ID фильма на Кинопоиске
-        :param locale: 'ru' or 'en' - локализация
         """
         query = (
             select(
@@ -112,42 +110,27 @@ class MovieManager(BaseManager):
 
         if not row:
             raise HTTPException(status_code=404, detail="Фильм не найден")
-
-        if locale == "en":
-
-            # Для английской локализации требуется tmdb_id (данные из TMDB)
-            if not row.tmdb_id:
-                raise HTTPException(status_code=404, detail="Данные для английской локализации недоступны")
-            
-            return MovieResponseEN(
-                movie_id=row.kp_id,
-                imdb_id=row.imdb_id,
-                title=row.title or "",  # только английское название
-                overview=row.overview or "",  # только английское описание
-                poster_url=row.tmdb_file_path or "",  # только постер из TMDB
-                year=row.year,
-                rating_kp=float(row.rating_kp) if row.rating_kp is not None else None,
-                rating_imdb=float(row.rating_imdb) if row.rating_imdb is not None else None,
-                movie_length=row.movie_length,
-                genres=row.genres_tmdb,  # только английские жанры
-                countries=row.origin_country,  # только английские страны
-                background_color=row.tmdb_background_color,  # только цвет фона из TMDB
-            )
-        else: # ru
-            return MovieResponseRU(
-                movie_id=row.kp_id,
-                name=row.name or "",  # только русское название
-                title=row.title or "",  # английское название
-                overview=row.description,  # только русское описание
-                poster_url=row.kp_file_path,  # только постер из Кинопоиска
-                year=row.year,
-                rating_kp=float(row.rating_kp) if row.rating_kp is not None else None,
-                rating_imdb=float(row.rating_imdb) if row.rating_imdb is not None else None,
-                movie_length=row.movie_length,
-                genres=row.genres,  # только русские жанры
-                countries=row.countries,  # только русские страны
-                background_color=row.kp_background_color,  # только цвет фона из Кинопоиска
-            )
+        
+        return MovieResponseLocalized(
+            movie_id=row.kp_id,
+            imdb_id=row.imdb_id,
+            name=row.name or "",
+            title=row.title or "",
+            overview_ru=row.description,
+            overview_en=row.overview,
+            poster_url_kp=row.kp_file_path,
+            poster_url_tmdb=row.tmdb_file_path,
+            year=row.year,
+            rating_kp=float(row.rating_kp) if row.rating_kp is not None else None,
+            rating_imdb=float(row.rating_imdb) if row.rating_imdb is not None else None,
+            movie_length=row.movie_length,
+            genres_ru=row.genres,
+            genres_en=row.genres_tmdb,
+            countries_ru=row.countries,
+            countries_en=row.origin_country,
+            background_color_kp=row.kp_background_color,
+            background_color_tmdb=row.tmdb_background_color,
+        )
 
     @read_only
     async def get_by_title_gpt(self, title_gpt: str) -> Dict:

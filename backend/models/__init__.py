@@ -3,8 +3,7 @@ from .movies import (
     ChatQA,
     QuestionStreamingRequest,
     MovieResponse,
-    MovieResponseRU,
-    MovieResponseEN,
+    MovieResponseLocalized,
     MovieDetails,
     MovieDetailsIOS,
     MovieStreamingRequest,
@@ -16,7 +15,7 @@ from .favorites import AddFavoriteRequest, GetFavoriteResponse, DeleteFavoriteRe
 __all__ = [
     "UserInitRequest", "UserInitResponse", "ReferralRequestModel", "PaymentRequest", "LogEventRequest",
     "ChatQA", "QuestionStreamingRequest", "MovieStreamingRequest", "MovieDetails", "MovieResponse",
-    "MovieResponseRU", "MovieResponseEN", "MovieDetailsIOS",
+    "MovieResponseLocalized", "MovieDetailsIOS",
     "AddFavoriteRequest", "GetFavoriteResponse", "DeleteFavoriteRequest", "WatchFavoriteRequest", "AddSkippedRequest",
     "MovieObject"
 ]

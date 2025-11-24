@@ -10,7 +10,7 @@ from db_managers.base import (
     read_only,
     transactional
     )
-from models import GetFavoriteResponse, MovieResponseRU, MovieResponseEN
+from models import GetFavoriteResponse, MovieResponseLocalized
 
 class FavoriteManager(BaseManager):
 
@@ -18,16 +18,14 @@ class FavoriteManager(BaseManager):
     async def get_favorites(
         self, 
         user_id: Union[int, str], 
-        platform: str = "telegram",
-        locale: str = "ru"
-    ) -> Union[List[GetFavoriteResponse], List[MovieResponseRU], List[MovieResponseEN]]:
+        platform: str = "telegram"
+    ) -> Union[List[GetFavoriteResponse], List[MovieResponseLocalized]]:
         """
         Получает избранные фильмы пользователя.
         
         Args:
             user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
             platform: 'telegram' or 'ios'
-            locale: 'ru' or 'en' - используется только для iOS
         """
         # Выбираем таблицу в зависимости от платформы
         if platform == "ios":
@@ -50,53 +48,35 @@ class FavoriteManager(BaseManager):
         # Выбираем таблицу фильмов в зависимости от платформы
         if platform == "ios":
             movies_table = ios_movies
-            if locale == "en":
-                # Для английской локализации нужны английские поля
-                query = (
-                    select(
-                        favorites_subquery.c.id,
-                        favorites_subquery.c.iswatched,
-                        movies_table.c.kp_id,
-                        movies_table.c.tmdb_id,
-                        movies_table.c.imdb_id,
-                        movies_table.c.title,
-                        movies_table.c.overview,
-                        movies_table.c.year,
-                        movies_table.c.tmdb_file_path,
-                        movies_table.c.rating_kp,
-                        movies_table.c.rating_imdb,
-                        movies_table.c.movie_length,
-                        movies_table.c.genres_tmdb,
-                        movies_table.c.origin_country,
-                        movies_table.c.tmdb_background_color,
-                    )
-                    .select_from(
-                        movies_table.join(favorites_subquery, favorites_subquery.c.kp_id == movies_table.c.kp_id)
-                    )
-                    .where(movies_table.c.tmdb_id.isnot(None))
+            # Для iOS возвращаем все данные для обеих локализаций
+            query = (
+                select(
+                    favorites_subquery.c.id,
+                    favorites_subquery.c.iswatched,
+                    movies_table.c.kp_id,
+                    movies_table.c.tmdb_id,
+                    movies_table.c.imdb_id,
+                    movies_table.c.name,
+                    movies_table.c.title,
+                    movies_table.c.description,
+                    movies_table.c.overview,
+                    movies_table.c.year,
+                    movies_table.c.kp_file_path,
+                    movies_table.c.tmdb_file_path,
+                    movies_table.c.rating_kp,
+                    movies_table.c.rating_imdb,
+                    movies_table.c.movie_length,
+                    movies_table.c.genres,
+                    movies_table.c.genres_tmdb,
+                    movies_table.c.countries,
+                    movies_table.c.origin_country,
+                    movies_table.c.kp_background_color,
+                    movies_table.c.tmdb_background_color,
                 )
-            else:  # ru
-                query = (
-                    select(
-                        favorites_subquery.c.id,
-                        favorites_subquery.c.iswatched,
-                        movies_table.c.kp_id,
-                        movies_table.c.name,
-                        movies_table.c.title,
-                        movies_table.c.description,
-                        movies_table.c.year,
-                        movies_table.c.kp_file_path,
-                        movies_table.c.rating_kp,
-                        movies_table.c.rating_imdb,
-                        movies_table.c.movie_length,
-                        movies_table.c.genres,
-                        movies_table.c.countries,
-                        movies_table.c.kp_background_color,
-                    )
-                    .select_from(
-                        movies_table.join(favorites_subquery, favorites_subquery.c.kp_id == movies_table.c.kp_id)
-                    )
+                .select_from(
+                    movies_table.join(favorites_subquery, favorites_subquery.c.kp_id == movies_table.c.kp_id)
                 )
+            )
         else:
             movies_table = movies
             query = (
@@ -124,42 +104,30 @@ class FavoriteManager(BaseManager):
         result = await self.session.execute(query)
         rows = result.fetchall()
 
-        # Возвращаем разные модели в зависимости от платформы и локализации
+        # Возвращаем разные модели в зависимости от платформы
         if platform == "ios":
-            if locale == "en":
-                return [
-                    MovieResponseEN(
-                        movie_id=row.kp_id,
-                        imdb_id=row.imdb_id,
-                        title=row.title or "",
-                        overview=row.overview or "",
-                        poster_url=row.tmdb_file_path or "",
-                        year=row.year,
-                        rating_kp=row.rating_kp,
-                        rating_imdb=row.rating_imdb,
-                        movie_length=row.movie_length,
-                        genres=row.genres_tmdb or [],
-                        countries=row.origin_country or [],
-                        background_color=row.tmdb_background_color,
-                    ) for row in rows
-                ]
-            else:  # ru
-                return [
-                    MovieResponseRU(
-                        movie_id=row.kp_id,
-                        name=row.name or "",
-                        title=row.title or "",  # английское название может быть пустым
-                        overview=row.description or "",
-                        poster_url=row.kp_file_path or "",
-                        year=row.year,
-                        rating_kp=row.rating_kp,
-                        rating_imdb=row.rating_imdb,
-                        movie_length=row.movie_length,
-                        genres=row.genres or [],
-                        countries=row.countries or [],
-                        background_color=row.kp_background_color,
-                    ) for row in rows
-                ]
+            return [
+                MovieResponseLocalized(
+                    movie_id=row.kp_id,
+                    imdb_id=row.imdb_id,
+                    name=row.name or "",
+                    title=row.title or "",
+                    overview_ru=row.description,
+                    overview_en=row.overview,
+                    poster_url_kp=row.kp_file_path,
+                    poster_url_tmdb=row.tmdb_file_path,
+                    year=row.year,
+                    rating_kp=row.rating_kp,
+                    rating_imdb=row.rating_imdb,
+                    movie_length=row.movie_length,
+                    genres_ru=row.genres or [],
+                    genres_en=row.genres_tmdb or [],
+                    countries_ru=row.countries or [],
+                    countries_en=row.origin_country or [],
+                    background_color_kp=row.kp_background_color,
+                    background_color_tmdb=row.tmdb_background_color,
+                ) for row in rows
+            ]
         else:  # telegram
             return [
                 GetFavoriteResponse(

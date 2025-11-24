@@ -6,8 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from db_managers import FavoriteManager, MovieManager
 from models import (
     GetFavoriteResponse,
-    MovieResponseRU,
-    MovieResponseEN,
+    MovieResponseLocalized,
     AddFavoriteRequest,
     DeleteFavoriteRequest,
     WatchFavoriteRequest
@@ -18,19 +17,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get("/get-favorites", response_model=Union[List[GetFavoriteResponse], List[MovieResponseRU], List[MovieResponseEN]])
+@router.get("/get-favorites", response_model=Union[List[GetFavoriteResponse], List[MovieResponseLocalized]])
 async def get_favorites_movies(
     user_id: Union[int, str],  # int для Telegram, str (device_id) для iOS
     platform: str = "telegram",
-    locale: str = "ru",  # 'ru' or 'en' - используется только для iOS
     favorite_manager: FavoriteManager = Depends(get_favorite_manager)
 ):
     """
     Получает избранные фильмы пользователя.
     Для Telegram возвращает List[GetFavoriteResponse].
-    Для iOS возвращает List[MovieResponseRU] или List[MovieResponseEN] в зависимости от locale.
+    Для iOS возвращает List[MovieResponseLocalized] с данными для обеих локализаций.
     """
-    return await favorite_manager.get_favorites(user_id=user_id, platform=platform, locale=locale)
+    return await favorite_manager.get_favorites(user_id=user_id, platform=platform)
 
 @router.post("/add-favorites")
 async def add_favorite_movie(
