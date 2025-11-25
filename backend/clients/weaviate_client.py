@@ -183,11 +183,18 @@ class MovieWeaviateRecommender:
 
             exclude_set = exclude_kp_ids or set()
             movies = []
+            excluded_count = 0
+            genre_conflict_count = 0
 
             for obj in results.objects:
                 props = obj.properties
                 kp_id = props.get("kp_id")
                 if kp_id in exclude_set:
+                    excluded_count += 1
+                    logger.debug(
+                        f"[WeaviateRecommender] _search_movies: фильм kp_id={kp_id} исключен "
+                        f"(находится в exclude_set)"
+                    )
                     continue
 
                 movie_dict = self._weaviate_to_movie_dict(props)
@@ -195,9 +202,21 @@ class MovieWeaviateRecommender:
                 if genres:
                     movie_genres = movie_dict.get("genres", [])
                     if self._skip_due_to_genre_conflict(movie_genres, genres):
+                        genre_conflict_count += 1
+                        logger.debug(
+                            f"[WeaviateRecommender] _search_movies: фильм kp_id={kp_id} исключен "
+                            f"из-за конфликта жанров: {movie_genres} vs {genres}"
+                        )
                         continue
 
                 movies.append(movie_dict)
+            
+            logger.info(
+                f"[WeaviateRecommender] _search_movies: обработано {len(results.objects)} объектов, "
+                f"исключено по exclude_set: {excluded_count}, исключено по жанрам: {genre_conflict_count}, "
+                f"осталось: {len(movies)}, вернется: {min(len(movies), result_limit)}"
+            )
+            
             return sorted(movies, key=lambda x: x.get("popularity_score") or 0.0, reverse=True)[:result_limit]
 
         except Exception as e:
@@ -231,6 +250,13 @@ class MovieWeaviateRecommender:
         с учётом жанров, годов, рейтингов и исключённых фильмов. Возвращает отсортированные результаты
         по кастомному скору (popularity_score), с дополнительной фильтрацией по конфликту жанров.
         """
+        exclude_set = exclude_kp_ids or set()
+        logger.info(
+            f"[WeaviateRecommender] recommend вызван: query='{query}', genres={genres}, "
+            f"years={start_year}-{end_year}, exclude_kp_ids={len(exclude_set)} фильмов "
+            f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}"
+        )
+        
         filters = Filter.by_property("year").greater_than(start_year) & \
                   Filter.by_property("year").less_than(end_year) & \
                   Filter.by_property("rating_kp").greater_than(rating_kp) & \
@@ -242,7 +268,7 @@ class MovieWeaviateRecommender:
             else:
                 filters = filters & Filter.by_property("genres").contains_any(genres)
 
-        return await self._search_movies(
+        results = await self._search_movies(
             query=query,
             alpha=0.7,
             fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
@@ -251,6 +277,21 @@ class MovieWeaviateRecommender:
             genres=genres,
             exclude_kp_ids=exclude_kp_ids
         )
+        
+        result_kp_ids = [m.get("kp_id") for m in results]
+        excluded_in_results = [kp_id for kp_id in result_kp_ids if kp_id in exclude_set]
+        if excluded_in_results:
+            logger.warning(
+                f"[WeaviateRecommender] ВНИМАНИЕ: В результатах recommend найдены исключенные фильмы! "
+                f"exclude_set содержит {len(exclude_set)} фильмов, но в результатах присутствуют: {excluded_in_results}"
+            )
+        else:
+            logger.info(
+                f"[WeaviateRecommender] recommend вернул {len(results)} фильмов, "
+                f"все исключены корректно. KP IDs результатов: {result_kp_ids[:20]}{'...' if len(result_kp_ids) > 20 else ''}"
+            )
+        
+        return results
 
     async def get_movie_by_kp_id(self, kp_id: int) -> Optional[dict]:
         """
@@ -326,21 +367,41 @@ class MovieWeaviateRecommender:
 
             exclude_set = exclude_kp_ids or set()
             movies = []
+            excluded_count = 0
+            genre_conflict_count = 0
+            low_score_count = 0
+
+            logger.info(
+                f"[WeaviateRecommender] recommend_similar: source_kp_id={source_kp_id}, "
+                f"exclude_kp_ids={len(exclude_set)} фильмов, "
+                f"получено {len(response.objects)} похожих фильмов"
+            )
 
             for obj in response.objects:
                 props = obj.properties
                 obj_kp_id = props.get("kp_id")
                 if obj_kp_id == source_kp_id or obj_kp_id in exclude_set:
+                    excluded_count += 1
+                    logger.debug(
+                        f"[WeaviateRecommender] recommend_similar: фильм kp_id={obj_kp_id} исключен "
+                        f"(source_kp_id={source_kp_id} или в exclude_set)"
+                    )
                     continue
 
                 movie_dict = self._weaviate_to_movie_dict(props)
                 movie_genres = movie_dict.get("genres", [])
                 
                 if self._skip_due_to_genre_conflict(movie_genres, source_genres):
+                    genre_conflict_count += 1
+                    logger.debug(
+                        f"[WeaviateRecommender] recommend_similar: фильм kp_id={obj_kp_id} исключен "
+                        f"из-за конфликта жанров"
+                    )
                     continue
 
                 dynamic_score = movie_dict.get("popularity_score") or 0.0
                 if dynamic_score <= 0:
+                    low_score_count += 1
                     continue
 
                 distance = obj.metadata.distance
@@ -348,6 +409,20 @@ class MovieWeaviateRecommender:
 
                 movie_dict["adjusted_distance"] = adjusted_distance
                 movies.append(movie_dict)
+
+            result_kp_ids = [m.get("kp_id") for m in movies]
+            excluded_in_results = [kp_id for kp_id in result_kp_ids if kp_id in exclude_set]
+            if excluded_in_results:
+                logger.warning(
+                    f"[WeaviateRecommender] ВНИМАНИЕ: В результатах recommend_similar найдены исключенные фильмы! "
+                    f"exclude_set содержит {len(exclude_set)} фильмов, но в результатах присутствуют: {excluded_in_results}"
+                )
+            
+            logger.info(
+                f"[WeaviateRecommender] recommend_similar: исключено по exclude_set/source: {excluded_count}, "
+                f"исключено по жанрам: {genre_conflict_count}, исключено по score: {low_score_count}, "
+                f"осталось: {len(movies)}, вернется: {min(len(movies), 100)}"
+            )
 
             return sorted(movies, key=lambda x: x["adjusted_distance"])[:100]
 

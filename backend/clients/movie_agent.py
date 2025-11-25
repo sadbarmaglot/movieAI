@@ -75,6 +75,11 @@ class MovieAgent:
             movies: List[MovieObject],
             locale: str = DEFAULT_LOCALE
     ) -> AsyncGenerator[MovieObject, None]:
+        logger.info(
+            f"[MovieAgent] Начало rerank для query='{query}', locale={locale}, "
+            f"входных фильмов: {len(movies)}"
+        )
+        
         # Выбрать промпт в зависимости от локализации
         rerank_template = RERANK_PROMPT_TEMPLATE_EN if locale == "en" else RERANK_PROMPT_TEMPLATE_RU
         rerank_prompt = rerank_template.format(
@@ -95,6 +100,7 @@ class MovieAgent:
         )
 
         buffer = ""
+        rerank_yielded = []
         async for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 buffer += chunk.choices[0].delta.content
@@ -106,9 +112,20 @@ class MovieAgent:
                         idx = int(line.strip()) - 1
                         if 0 <= idx < len(movies):
                             movie = movies[idx]
+                            kp_id = movie.get("kp_id")
+                            rerank_yielded.append(kp_id)
+                            logger.debug(
+                                f"[MovieAgent] Rerank выдал фильм: kp_id={kp_id}, "
+                                f"позиция в исходном списке={idx+1}"
+                            )
                             yield movie
                     except ValueError:
                         continue
+        
+        logger.info(
+            f"[MovieAgent] Завершен rerank: выдано {len(rerank_yielded)} фильмов. "
+            f"KP IDs: {rerank_yielded[:20]}{'...' if len(rerank_yielded) > 20 else ''}"
+        )
 
     @staticmethod
     async def _get_user_excluded_kp_ids(
@@ -118,7 +135,14 @@ class MovieAgent:
     ) -> Set[int]:
         skipped = await movie_manager.get_skipped(user_id, platform=platform)
         favorites = await movie_manager.get_favorites(user_id, platform=platform)
-        return set(skipped + favorites)
+        exclude_set = set(skipped + favorites)
+        logger.info(
+            f"[MovieAgent] Получены исключенные фильмы для user_id={user_id}, platform={platform}: "
+            f"skipped={len(skipped)} фильмов {skipped[:10]}{'...' if len(skipped) > 10 else ''}, "
+            f"favorites={len(favorites)} фильмов {favorites[:10]}{'...' if len(favorites) > 10 else ''}, "
+            f"всего исключено: {len(exclude_set)}"
+        )
+        return exclude_set
 
     async def _enrich_movie(
             self,
@@ -139,7 +163,12 @@ class MovieAgent:
         """
         kp_id = movie.get("kp_id")
         if not kp_id:
+            logger.warning(f"[MovieAgent] _enrich_movie: фильм без kp_id, пропускаем")
             return None
+        
+        logger.debug(
+            f"[MovieAgent] Обогащаем фильм kp_id={kp_id}, platform={platform}, locale={locale}"
+        )
 
         # Для iOS данные уже полные из Weaviate, преобразуем в MovieResponseLocalized
         if platform == "ios":
@@ -148,7 +177,7 @@ class MovieAgent:
             # Для английской локализации требуется tmdb_id (данные из TMDB)
             if locale == "en":
                 if not movie.get("tmdb_id"):
-                    return None  # Пропускаем фильм без данных для английской локализации
+                    return None
                 
             # Преобразуем жанры и страны из списка строк в список словарей для русской локализации
             genres_ru = movie.get("genres", [])
@@ -191,6 +220,9 @@ class MovieAgent:
                 movie_manager.get_by_kp_id(kp_id=kp_id), 
                 timeout=5
             )
+            logger.debug(
+                f"[MovieAgent] Фильм kp_id={kp_id} найден в БД: title_ru={db_movie.title_ru}"
+            )
             return EnrichedMovieObject(
                 movie_id=db_movie.movie_id,
                 title_ru=db_movie.title_ru,
@@ -203,14 +235,23 @@ class MovieAgent:
                 genres=db_movie.genres,
                 background_color=db_movie.background_color
             )
-        except (HTTPException, asyncio.TimeoutError):
+        except (HTTPException, asyncio.TimeoutError) as e:
+            logger.warning(
+                f"[MovieAgent] Фильм kp_id={kp_id} не найден в БД (ошибка: {type(e).__name__}), "
+                f"пробуем Kinopoisk API"
+            )
             # Fallback на Kinopoisk API только для Telegram
             try:
                 kp_data = await asyncio.wait_for(self.kp_client.get_by_kp_id(kp_id=kp_id), timeout=5)
                 if not kp_data:
+                    logger.warning(f"[MovieAgent] Фильм kp_id={kp_id} не найден в Kinopoisk API")
                     return None
                 await movie_manager.insert_movies([kp_data])
                 await session.commit()
+                logger.info(
+                    f"[MovieAgent] Фильм kp_id={kp_id} получен из Kinopoisk API и добавлен в БД: "
+                    f"title_ru={kp_data.title_ru}"
+                )
                 return EnrichedMovieObject(
                     movie_id=kp_data.kp_id,
                     title_ru=kp_data.title_ru,
@@ -224,16 +265,27 @@ class MovieAgent:
                     background_color=kp_data.background_color
                 )
             except asyncio.TimeoutError:
+                logger.error(f"[MovieAgent] Timeout при получении фильма kp_id={kp_id} из Kinopoisk API")
                 return None
 
     async def answer_tool_call(self, tool_call_id: str, answer: str):
         """
         Обработка ответа пользователя на tool_call
         """
+        logger.info(
+            f"[MovieAgent] answer_tool_call: получен ответ пользователя на tool_call_id={tool_call_id}, "
+            f"answer='{answer[:200]}...'"
+        )
+        
         if not self.last_tool_calls_message:
+            logger.error("[MovieAgent] answer_tool_call: нет предыдущего tool_calls сообщения")
             raise RuntimeError("Нет предыдущего tool_calls сообщения")
         valid_ids = {tc["id"] for tc in self.last_tool_calls_message["tool_calls"]}
         if tool_call_id not in valid_ids:
+            logger.error(
+                f"[MovieAgent] answer_tool_call: tool_call_id '{tool_call_id}' не найден в последнем сообщении. "
+                f"Доступные IDs: {valid_ids}"
+            )
             raise RuntimeError(
                 f"tool_call_id '{tool_call_id}' не найден в последнем сообщении assistant: {valid_ids}"
             )
@@ -242,6 +294,10 @@ class MovieAgent:
             "tool_call_id": tool_call_id,
             "content": json.dumps({"answer": answer})
         })
+        logger.debug(
+            f"[MovieAgent] answer_tool_call: ответ добавлен в историю сообщений, "
+            f"всего сообщений: {len(self.messages)}"
+        )
 
     async def run_qa(
             self,
@@ -255,6 +311,11 @@ class MovieAgent:
         Args:
             locale: 'ru' or 'en' - локализация для промпта и ответов
         """
+        logger.info(
+            f"[MovieAgent] run_qa: начало диалога, user_input='{user_input}', "
+            f"add_user_message={add_user_message}, locale={locale}"
+        )
+        
         # Обновить системный промпт в зависимости от локализации
         if locale == "en":
             self.messages[0] = {"role": "system", "content": SYSTEM_PROMPT_AGENT_EN}
@@ -263,6 +324,7 @@ class MovieAgent:
         
         if user_input and add_user_message:
             self.messages.append({"role": "user", "content": user_input})
+            logger.debug(f"[MovieAgent] Добавлено сообщение пользователя в историю: '{user_input[:100]}...'")
 
         while True:
             response = await self.openai_client.chat.completions.create(
@@ -292,30 +354,50 @@ class MovieAgent:
                 self.messages.append(self.last_tool_calls_message)
 
                 for tool_call in tool_calls:
+                    tool_name = tool_call.function.name
+                    logger.info(
+                        f"[MovieAgent] QA вызван tool: {tool_name}, "
+                        f"tool_call_id={tool_call.id}, arguments={tool_call.function.arguments}"
+                    )
+                    
                     if tool_call.function.name == "ask_user_question":
                         args = json.loads(tool_call.function.arguments)
+                        question = args["question"]
+                        logger.info(
+                            f"[MovieAgent] QA задает вопрос пользователю: '{question}'"
+                        )
                         yield {
                             "type": "question",
-                            "question": args["question"],
+                            "question": question,
                             "tool_call_id": tool_call.id
                         }
                         return
                     elif tool_call.function.name == "search_movies_by_vector":
                         args = json.loads(tool_call.function.arguments)
-                        yield {
-                            "type": "search",
+                        search_params = {
                             "query": args["query"],
                             "genres": args.get("genres", []),
                             "atmospheres": args.get("atmospheres", []),
                             "start_year": args.get("start_year", 1900),
                             "end_year": args.get("end_year", 2025)
                         }
+                        logger.info(
+                            f"[MovieAgent] QA запросил поиск фильмов: {search_params}"
+                        )
+                        yield {
+                            "type": "search",
+                            **search_params
+                        }
                         return
             elif content:
+                logger.info(
+                    f"[MovieAgent] QA получил текстовый ответ от модели: '{content[:200]}...'"
+                )
                 self.messages.append({"role": "assistant", "content": content})
                 yield {"type": "message", "content": content}
                 return
             else:
+                logger.error("[MovieAgent] QA получил ответ без tool_call и без текста")
                 raise RuntimeError("Ответ без tool_call и без текста")
 
     async def run_movie_streaming(
@@ -357,6 +439,12 @@ class MovieAgent:
                 platform=platform
             )
 
+            logger.info(
+                f"[MovieAgent] run_movie_streaming: user_id={user_id}, platform={platform}, "
+                f"query='{query}', genres={genres}, years={start_year}-{end_year}, "
+                f"exclude_kp_ids={len(exclude_set)} фильмов"
+            )
+
             movies = await self.recommender.recommend(
                 query=query,
                 genres=genres,
@@ -366,7 +454,36 @@ class MovieAgent:
                 locale=locale
             )
 
+            logger.info(
+                f"[MovieAgent] Получено {len(movies)} фильмов из recommend для user_id={user_id}. "
+                f"KP IDs: {[m.get('kp_id') for m in movies[:20]]}{'...' if len(movies) > 20 else ''}"
+            )
+
+            rerank_count = 0
+            enriched_count = 0
+            yielded_kp_ids = set()  # Отслеживаем уже выданные фильмы в этой сессии
             async for movie in self._rerank_movies_streaming(query, movies, locale=locale):
+                rerank_count += 1
+                kp_id = movie.get("kp_id")
+                logger.debug(
+                    f"[MovieAgent] Фильм после rerank #{rerank_count}: kp_id={kp_id}, "
+                    f"name={movie.get('name') or movie.get('title', 'N/A')}"
+                )
+                
+                # Проверка на дубликаты в рамках одной сессии
+                if kp_id in yielded_kp_ids:
+                    logger.warning(
+                        f"[MovieAgent] ВНИМАНИЕ: Дубликат фильма в одной сессии! "
+                        f"kp_id={kp_id} уже был выдан ранее для user_id={user_id}"
+                    )
+                
+                # Проверка на то, что фильм не в exclude_set
+                if kp_id in exclude_set:
+                    logger.warning(
+                        f"[MovieAgent] ВНИМАНИЕ: Фильм kp_id={kp_id} находится в exclude_set, "
+                        f"но все равно попал в результаты rerank для user_id={user_id}"
+                    )
+                
                 enriched = await self._enrich_movie(
                     movie=movie,
                     movie_manager=movie_manager,
@@ -375,4 +492,31 @@ class MovieAgent:
                     locale=locale
                 )
                 if enriched:
+                    enriched_count += 1
+                    enriched_kp_id = enriched.movie_id if hasattr(enriched, 'movie_id') else enriched.get('movie_id') if isinstance(enriched, dict) else None
+                    
+                    # Проверка на дубликаты перед выдачей
+                    if enriched_kp_id in yielded_kp_ids:
+                        logger.error(
+                            f"[MovieAgent] КРИТИЧЕСКАЯ ОШИБКА: Пытаемся выдать дубликат фильма! "
+                            f"kp_id={enriched_kp_id} уже был выдан в этой сессии для user_id={user_id}"
+                        )
+                    else:
+                        yielded_kp_ids.add(enriched_kp_id)
+                    
+                    logger.info(
+                        f"[MovieAgent] Выдаем фильм #{enriched_count} пользователю user_id={user_id}: "
+                        f"kp_id={enriched_kp_id}, "
+                        f"title={getattr(enriched, 'title_ru', None) or getattr(enriched, 'name', None) or 'N/A'}"
+                    )
                     yield {"type": "movie", **enriched.model_dump()}
+                else:
+                    logger.warning(
+                        f"[MovieAgent] Не удалось обогатить фильм kp_id={kp_id} для user_id={user_id}"
+                    )
+            
+            logger.info(
+                f"[MovieAgent] Завершена выдача фильмов для user_id={user_id}: "
+                f"rerank={rerank_count}, enriched={enriched_count}, выдано={enriched_count}, "
+                f"уникальных kp_ids: {len(yielded_kp_ids)}"
+            )

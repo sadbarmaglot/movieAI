@@ -1,3 +1,4 @@
+import logging
 from typing import List, Union
 from sqlalchemy import select, insert, delete, update
 
@@ -10,6 +11,8 @@ from db_managers.base import (
     transactional
     )
 from models import GetFavoriteResponse, MovieResponseLocalized
+
+logger = logging.getLogger(__name__)
 
 class FavoriteManager(BaseManager):
 
@@ -147,6 +150,15 @@ class FavoriteManager(BaseManager):
         if not exists:
             await self.session.execute(
                 insert(favorites_table).values(**values)
+            )
+            logger.info(
+                f"[FavoriteManager] Фильм добавлен в favorites: user_id={user_id}, "
+                f"kp_id={kp_id}, platform={platform}"
+            )
+        else:
+            logger.debug(
+                f"[FavoriteManager] Фильм уже был в favorites: user_id={user_id}, "
+                f"kp_id={kp_id}, platform={platform}"
             )
 
     @transactional

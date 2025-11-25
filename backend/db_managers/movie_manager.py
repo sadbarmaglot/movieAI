@@ -159,7 +159,15 @@ class MovieManager(BaseManager):
             await self.session.execute(
                 insert(skipped_table).values(**values)
             )
-            logger.info(f"{kp_id} was skipped")
+            logger.info(
+                f"[MovieManager] Фильм добавлен в skipped: user_id={user_id}, "
+                f"kp_id={kp_id}, platform={platform}"
+            )
+        else:
+            logger.debug(
+                f"[MovieManager] Фильм уже был в skipped: user_id={user_id}, "
+                f"kp_id={kp_id}, platform={platform}"
+            )
     
     @read_only
     async def get_skipped(self, user_id: Union[int, str], platform: str = "telegram") -> List[int]:
@@ -177,7 +185,12 @@ class MovieManager(BaseManager):
             select(skipped_table).where(user_field == user_id_value) # type: ignore
         )
         rows = result.fetchall()
-        return [row.kp_id for row in rows]
+        skipped_list = [row.kp_id for row in rows]
+        logger.debug(
+            f"[MovieManager] get_skipped: user_id={user_id}, platform={platform}, "
+            f"найдено {len(skipped_list)} фильмов: {skipped_list[:20]}{'...' if len(skipped_list) > 20 else ''}"
+        )
+        return skipped_list
 
     @read_only
     async def get_favorites(self, user_id: Union[int, str], platform: str = "telegram") -> List[int]:
@@ -195,4 +208,9 @@ class MovieManager(BaseManager):
             select(favorites_table).where(user_field == user_id_value) # type: ignore
         )
         rows = result.fetchall()
-        return [row.kp_id for row in rows]
+        favorites_list = [row.kp_id for row in rows]
+        logger.debug(
+            f"[MovieManager] get_favorites: user_id={user_id}, platform={platform}, "
+            f"найдено {len(favorites_list)} фильмов: {favorites_list[:20]}{'...' if len(favorites_list) > 20 else ''}"
+        )
+        return favorites_list
