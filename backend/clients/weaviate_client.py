@@ -270,7 +270,7 @@ class MovieWeaviateRecommender:
 
         results = await self._search_movies(
             query=query,
-            alpha=0.7,
+            alpha=0.8,
             fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
             result_limit=100,
             filters=filters,
