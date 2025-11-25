@@ -101,6 +101,7 @@ class MovieAgent:
 
         buffer = ""
         rerank_yielded = []
+        seen_kp_ids = set()  # Отслеживаем уже выданные фильмы для дедупликации
         async for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 buffer += chunk.choices[0].delta.content
@@ -113,6 +114,16 @@ class MovieAgent:
                         if 0 <= idx < len(movies):
                             movie = movies[idx]
                             kp_id = movie.get("kp_id")
+                            
+                            # Дедупликация: пропускаем фильмы, которые уже были выданы
+                            if kp_id in seen_kp_ids:
+                                logger.warning(
+                                    f"[MovieAgent] Rerank пытается выдать дубликат: kp_id={kp_id}, "
+                                    f"позиция в исходном списке={idx+1}, пропускаем"
+                                )
+                                continue
+                            
+                            seen_kp_ids.add(kp_id)
                             rerank_yielded.append(kp_id)
                             logger.debug(
                                 f"[MovieAgent] Rerank выдал фильм: kp_id={kp_id}, "
@@ -123,7 +134,8 @@ class MovieAgent:
                         continue
         
         logger.info(
-            f"[MovieAgent] Завершен rerank: выдано {len(rerank_yielded)} фильмов. "
+            f"[MovieAgent] Завершен rerank: выдано {len(rerank_yielded)} уникальных фильмов "
+            f"(всего попыток было больше, но дубликаты отфильтрованы). "
             f"KP IDs: {rerank_yielded[:20]}{'...' if len(rerank_yielded) > 20 else ''}"
         )
 
@@ -462,6 +474,9 @@ class MovieAgent:
             rerank_count = 0
             enriched_count = 0
             yielded_kp_ids = set()  # Отслеживаем уже выданные фильмы в этой сессии
+            skipped_duplicates = 0
+            skipped_excluded = 0
+            
             async for movie in self._rerank_movies_streaming(query, movies, locale=locale):
                 rerank_count += 1
                 kp_id = movie.get("kp_id")
@@ -470,19 +485,24 @@ class MovieAgent:
                     f"name={movie.get('name') or movie.get('title', 'N/A')}"
                 )
                 
-                # Проверка на дубликаты в рамках одной сессии
+                # Проверка на дубликаты в рамках одной сессии - пропускаем
                 if kp_id in yielded_kp_ids:
+                    skipped_duplicates += 1
                     logger.warning(
-                        f"[MovieAgent] ВНИМАНИЕ: Дубликат фильма в одной сессии! "
+                        f"[MovieAgent] Пропускаем дубликат фильма в одной сессии! "
                         f"kp_id={kp_id} уже был выдан ранее для user_id={user_id}"
                     )
+                    continue
                 
-                # Проверка на то, что фильм не в exclude_set
+                # Проверка на то, что фильм не в exclude_set - пропускаем
                 if kp_id in exclude_set:
+                    skipped_excluded += 1
                     logger.warning(
-                        f"[MovieAgent] ВНИМАНИЕ: Фильм kp_id={kp_id} находится в exclude_set, "
-                        f"но все равно попал в результаты rerank для user_id={user_id}"
+                        f"[MovieAgent] Пропускаем фильм из exclude_set! "
+                        f"kp_id={kp_id} находится в exclude_set для user_id={user_id}, "
+                        f"но попал в результаты rerank"
                     )
+                    continue
                 
                 enriched = await self._enrich_movie(
                     movie=movie,
@@ -495,15 +515,16 @@ class MovieAgent:
                     enriched_count += 1
                     enriched_kp_id = enriched.movie_id if hasattr(enriched, 'movie_id') else enriched.get('movie_id') if isinstance(enriched, dict) else None
                     
-                    # Проверка на дубликаты перед выдачей
+                    # Дополнительная проверка на дубликаты перед выдачей (на случай если kp_id изменился)
                     if enriched_kp_id in yielded_kp_ids:
                         logger.error(
                             f"[MovieAgent] КРИТИЧЕСКАЯ ОШИБКА: Пытаемся выдать дубликат фильма! "
-                            f"kp_id={enriched_kp_id} уже был выдан в этой сессии для user_id={user_id}"
+                            f"kp_id={enriched_kp_id} уже был выдан в этой сессии для user_id={user_id}, "
+                            f"пропускаем"
                         )
-                    else:
-                        yielded_kp_ids.add(enriched_kp_id)
+                        continue
                     
+                    yielded_kp_ids.add(enriched_kp_id)
                     logger.info(
                         f"[MovieAgent] Выдаем фильм #{enriched_count} пользователю user_id={user_id}: "
                         f"kp_id={enriched_kp_id}, "
@@ -518,5 +539,6 @@ class MovieAgent:
             logger.info(
                 f"[MovieAgent] Завершена выдача фильмов для user_id={user_id}: "
                 f"rerank={rerank_count}, enriched={enriched_count}, выдано={enriched_count}, "
-                f"уникальных kp_ids: {len(yielded_kp_ids)}"
+                f"уникальных kp_ids: {len(yielded_kp_ids)}, "
+                f"пропущено дубликатов: {skipped_duplicates}, пропущено из exclude_set: {skipped_excluded}"
             )
