@@ -192,8 +192,43 @@ class MovieAgent:
             
             # Для английской локализации требуется tmdb_id (данные из TMDB)
             if locale == "en":
-                if not movie.get("tmdb_id"):
+                tmdb_id = movie.get("tmdb_id")
+                title = movie.get("title")
+                tmdb_file_path = movie.get("tmdb_file_path")
+                overview = movie.get("overview")
+                genres_tmdb = movie.get("genres_tmdb", [])
+                
+                if not tmdb_id:
+                    logger.warning(
+                        f"[MovieAgent] _enrich_movie: фильм kp_id={kp_id} пропущен для locale=en, platform={platform}: "
+                        f"отсутствует tmdb_id"
+                    )
                     return None
+                
+                # Логируем фильмы с неполными данными для английской локализации
+                if not title:
+                    logger.warning(
+                        f"[MovieAgent] _enrich_movie: фильм kp_id={kp_id}, tmdb_id={tmdb_id} для locale=en, platform={platform}: "
+                        f"отсутствует title (название на английском)"
+                    )
+                
+                if not tmdb_file_path:
+                    logger.warning(
+                        f"[MovieAgent] _enrich_movie: фильм kp_id={kp_id}, tmdb_id={tmdb_id}, title='{title or "N/A"}' "
+                        f"для locale=en, platform={platform}: отсутствует tmdb_file_path (постер из TMDB) - будет сломанный постер!"
+                    )
+                
+                if not overview:
+                    logger.debug(
+                        f"[MovieAgent] _enrich_movie: фильм kp_id={kp_id}, tmdb_id={tmdb_id}, title='{title or "N/A"}' "
+                        f"для locale=en без overview (описание на английском)"
+                    )
+                
+                if not genres_tmdb or len(genres_tmdb) == 0:
+                    logger.debug(
+                        f"[MovieAgent] _enrich_movie: фильм kp_id={kp_id}, tmdb_id={tmdb_id}, title='{title or "N/A"}' "
+                        f"для locale=en без genres_tmdb (жанры на английском)"
+                    )
                 
             # Преобразуем жанры и страны из списка строк в список словарей для русской локализации
             genres_ru = movie.get("genres", [])
