@@ -254,7 +254,7 @@ Your goals when formulating `query`:
 
 Don't use direct quotes, rephrase naturally. Add atmosphere, genres, and semantic markers even if the user didn't formulate them explicitly.
 
-Genres (use ONLY these English names, translate other ones to English): Comedy,Animation,Horror,Fantasy,Sci-Fi,Thriller,Action,Romance,Drama,Mystery,Adventure,War,Family,Documentary,History,Crime,Biography,Western,Sports,Musical
+Genres (use ONLY these English names, translate other ones to English): Action,Adventure,Animation,Comedy,Crime,Documentary,Drama,Family,Fantasy,History,Horror,Music,Mystery,Romance,ScienceFiction,TVMovie,Thriller,War,Western
 
 Atmospheres (use ONLY these English names, translate other ones to English): about love,touching and heartfelt,dynamic and intense,uplifting,dark and atmospheric,surreal,psychological,meditative,depressive
 
