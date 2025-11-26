@@ -211,6 +211,13 @@ class MovieWeaviateRecommender:
 
                 movies.append(movie_dict)
             
+            if len(results.objects) == 0:
+                logger.warning(
+                    f"[WeaviateRecommender] _search_movies: Weaviate вернул 0 объектов! "
+                    f"query='{query[:100] if query else 'None'}...', "
+                    f"filters применены, fetch_limit={fetch_limit}"
+                )
+            
             logger.info(
                 f"[WeaviateRecommender] _search_movies: обработано {len(results.objects)} объектов, "
                 f"исключено по exclude_set: {excluded_count}, исключено по жанрам: {genre_conflict_count}, "
@@ -264,9 +271,27 @@ class MovieWeaviateRecommender:
 
         if genres is not None and len(genres) > 0:
             if locale == "en":
-                filters = filters & Filter.by_property("genres_tmdb").contains_any(genres)
+                genre_filter = Filter.by_property("genres_tmdb").contains_any(genres)
+                logger.info(
+                    f"[WeaviateRecommender] Применяем фильтр по жанрам для locale=en: "
+                    f"genres={genres}, фильтр: genres_tmdb.contains_any({genres})"
+                )
+                filters = filters & genre_filter
             else:
-                filters = filters & Filter.by_property("genres").contains_any(genres)
+                genre_filter = Filter.by_property("genres").contains_any(genres)
+                logger.info(
+                    f"[WeaviateRecommender] Применяем фильтр по жанрам для locale=ru: "
+                    f"genres={genres}, фильтр: genres.contains_any({genres})"
+                )
+                filters = filters & genre_filter
+        else:
+            logger.debug(f"[WeaviateRecommender] Жанры не указаны, фильтр по жанрам не применяется")
+
+        logger.debug(
+            f"[WeaviateRecommender] Итоговые фильтры: year>{start_year} & year<{end_year} & "
+            f"rating_kp>{rating_kp} & rating_imdb>{rating_imdb}"
+            + (f" & genres filter" if genres else "")
+        )
 
         results = await self._search_movies(
             query=query,

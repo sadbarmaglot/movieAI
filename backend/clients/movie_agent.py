@@ -102,6 +102,7 @@ class MovieAgent:
         buffer = ""
         rerank_yielded = []
         seen_kp_ids = set()  # Отслеживаем уже выданные фильмы для дедупликации
+        rerank_duplicates_count = 0  # Счетчик дубликатов в rerank
         async for chunk in response:
             if chunk.choices and chunk.choices[0].delta.content:
                 buffer += chunk.choices[0].delta.content
@@ -117,6 +118,7 @@ class MovieAgent:
                             
                             # Дедупликация: пропускаем фильмы, которые уже были выданы
                             if kp_id in seen_kp_ids:
+                                rerank_duplicates_count += 1
                                 logger.warning(
                                     f"[MovieAgent] Rerank пытается выдать дубликат: kp_id={kp_id}, "
                                     f"позиция в исходном списке={idx+1}, пропускаем"
@@ -134,8 +136,8 @@ class MovieAgent:
                         continue
         
         logger.info(
-            f"[MovieAgent] Завершен rerank: выдано {len(rerank_yielded)} уникальных фильмов "
-            f"(всего попыток было больше, но дубликаты отфильтрованы). "
+            f"[MovieAgent] Завершен rerank: выдано {len(rerank_yielded)} уникальных фильмов, "
+            f"отфильтровано дубликатов в rerank: {rerank_duplicates_count}. "
             f"KP IDs: {rerank_yielded[:20]}{'...' if len(rerank_yielded) > 20 else ''}"
         )
 
@@ -148,11 +150,13 @@ class MovieAgent:
         skipped = await movie_manager.get_skipped(user_id, platform=platform)
         favorites = await movie_manager.get_favorites(user_id, platform=platform)
         exclude_set = set(skipped + favorites)
+        duplicates_in_exclude = len(skipped) + len(favorites) - len(exclude_set)
         logger.info(
             f"[MovieAgent] Получены исключенные фильмы для user_id={user_id}, platform={platform}: "
             f"skipped={len(skipped)} фильмов {skipped[:10]}{'...' if len(skipped) > 10 else ''}, "
             f"favorites={len(favorites)} фильмов {favorites[:10]}{'...' if len(favorites) > 10 else ''}, "
-            f"всего исключено: {len(exclude_set)}"
+            f"всего уникальных исключено: {len(exclude_set)}"
+            + (f" (найдено {duplicates_in_exclude} пересечений между skipped и favorites)" if duplicates_in_exclude > 0 else "")
         )
         return exclude_set
 
@@ -540,5 +544,6 @@ class MovieAgent:
                 f"[MovieAgent] Завершена выдача фильмов для user_id={user_id}: "
                 f"rerank={rerank_count}, enriched={enriched_count}, выдано={enriched_count}, "
                 f"уникальных kp_ids: {len(yielded_kp_ids)}, "
-                f"пропущено дубликатов: {skipped_duplicates}, пропущено из exclude_set: {skipped_excluded}"
+                f"пропущено дубликатов после rerank: {skipped_duplicates}, "
+                f"пропущено из exclude_set: {skipped_excluded}"
             )
