@@ -270,6 +270,10 @@ class MovieWeaviateRecommender:
                   Filter.by_property("rating_imdb").greater_than(rating_imdb)
 
         if genres is not None and len(genres) > 0:
+            logger.info(
+                f"[WeaviateRecommender] Получены genres: {genres}, type: {type(genres)}, "
+                f"locale={locale}"
+            )
             if locale == "en":
                 genre_filter = Filter.by_property("genres_tmdb").contains_any(genres)
                 logger.info(

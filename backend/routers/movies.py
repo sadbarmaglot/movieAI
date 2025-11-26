@@ -238,12 +238,20 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
     platform = data.get("platform", "telegram")
     locale = data.get("locale", "ru")  # Получаем локализацию из запроса
     
+    genres = data.get("genres")
+    logger.info(
+        f"[handle_movie_agent_streaming] Получены genres из data: {genres}, "
+        f"type: {type(genres)}, platform={platform}, locale={locale}"
+    )
+    
+    atmospheres = data.get("atmospheres")
+    
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
         platform=platform,
         query=data.get("query"),
-        genres=data.get("genres"),
-        atmospheres=data.get("atmospheres"),
+        genres=genres,
+        atmospheres=atmospheres,
         start_year=data.get("start_year", 1900),
         end_year=data.get("end_year", 2025),
         locale=locale
