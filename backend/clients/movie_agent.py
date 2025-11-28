@@ -406,11 +406,17 @@ class MovieAgent:
                         }
                         return
             elif content:
-                logger.info(
-                    f"[MovieAgent] QA получил текстовый ответ от модели: '{content[:200]}...'"
+                logger.warning(
+                    f"[MovieAgent] QA получил текстовый ответ от модели вместо использования инструмента: '{content[:200]}...'"
                 )
-                self.messages.append({"role": "assistant", "content": content})
-                yield {"type": "message", "content": content}
+                logger.info(
+                    f"[MovieAgent] Преобразуем текстовый ответ в вопрос через ask_user_question"
+                )
+                yield {
+                    "type": "question",
+                    "question": content,
+                    "tool_call_id": None
+                }
                 return
             else:
                 logger.error("[MovieAgent] QA получил ответ без tool_call и без текста")
