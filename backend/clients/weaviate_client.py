@@ -256,10 +256,7 @@ class MovieWeaviateRecommender:
         Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
         с учётом жанров, годов, рейтингов и исключённых фильмов. Возвращает отсортированные результаты
         по кастомному скору (popularity_score), с дополнительной фильтрацией по конфликту жанров.
-        
-        Использует alpha=0.95 для приоритета векторного поиска над keyword поиском, что улучшает
-        семантический поиск для запросов типа "фильмы на рождество" и снижает влияние точных совпадений.
-        """
+                """
         exclude_set = exclude_kp_ids or set()
         logger.info(
             f"[WeaviateRecommender] recommend вызван: query='{query}', genres={genres}, "
@@ -302,7 +299,7 @@ class MovieWeaviateRecommender:
 
         results = await self._search_movies(
             query=query,
-            alpha=0.95,  # Увеличено с 0.8 для снижения влияния keyword поиска на семантические запросы
+            alpha=0.95,
             fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
             result_limit=100,
             filters=filters,

@@ -388,6 +388,42 @@ class MovieAgent:
                             "tool_call_id": tool_call.id
                         }
                         return
+                    elif tool_call.function.name == "suggest_movie_titles":
+                        args = json.loads(tool_call.function.arguments)
+                        titles = args.get("titles", [])
+                        base_query = args.get("query", "")
+                        
+                        # Формируем улучшенный query с названиями фильмов
+                        if titles:
+                            titles_str = ", ".join(titles)
+                            enhanced_query = f"{base_query} похожие на: {titles_str}"
+                            logger.info(
+                                f"[MovieAgent] QA предложил названия фильмов: {titles}, "
+                                f"улучшенный query: '{enhanced_query[:200]}...'"
+                            )
+                        else:
+                            enhanced_query = base_query
+                            logger.warning(
+                                f"[MovieAgent] suggest_movie_titles вызван без названий, "
+                                f"используем только base_query"
+                            )
+                        
+                        search_params = {
+                            "query": enhanced_query,
+                            "genres": args.get("genres", []),
+                            "atmospheres": args.get("atmospheres", []),
+                            "start_year": args.get("start_year", 1900),
+                            "end_year": args.get("end_year", 2025),
+                            "suggested_titles": titles  # Сохраняем для логирования
+                        }
+                        logger.info(
+                            f"[MovieAgent] QA запросил поиск фильмов с предложенными названиями: {search_params}"
+                        )
+                        yield {
+                            "type": "search",
+                            **search_params
+                        }
+                        return
                     elif tool_call.function.name == "search_movies_by_vector":
                         args = json.loads(tool_call.function.arguments)
                         search_params = {
@@ -481,12 +517,14 @@ class MovieAgent:
                 f"KP IDs: {[m.get('kp_id') for m in movies[:20]]}{'...' if len(movies) > 20 else ''}"
             )
 
+            # rerank_count = 0
             enriched_count = 0
             yielded_kp_ids = set()  # Отслеживаем уже выданные фильмы в этой сессии
             skipped_duplicates = 0
             skipped_excluded = 0
             
-            # Итерация по результатам без rerank - используем порядок из Weaviate
+            #async for movie in self._rerank_movies_streaming(query, movies, locale=locale):
+            #    rerank_count += 1
             for movie in movies:
                 kp_id = movie.get("kp_id")
                 logger.debug(
@@ -509,6 +547,7 @@ class MovieAgent:
                     logger.warning(
                         f"[MovieAgent] Пропускаем фильм из exclude_set! "
                         f"kp_id={kp_id} находится в exclude_set для user_id={user_id}"
+                        # f"но попал в результаты rerank"
                     )
                     continue
                 

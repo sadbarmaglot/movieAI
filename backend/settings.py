@@ -237,7 +237,15 @@ SYSTEM_PROMPT_AGENT_RU = """
 Атмосферы (используй ТОЛЬКО эти русские названия, переводи английские на русский): про любовь,душевный и трогательный,динамичный и напряженный,жизнеутверждающий,мрачный и атмосферный,сюрреалистичный,психологический,медитативный,депрессивный
 
 
-После сбора информации вызови `search_movies_by_vector` и передай:
+После сбора информации у тебя есть два варианта:
+
+1. Если ты можешь предложить конкретные названия фильмов (5-10), которые точно соответствуют запросу - вызови `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
+
+2. Если конкретные названия неизвестны или запрос слишком абстрактный - вызови `search_movies_by_vector` с развернутым описанием.
+
+⚠️ ВАЖНО: Используй `suggest_movie_titles` только если уверен в названиях известных фильмов. Если сомневаешься - лучше использовать `search_movies_by_vector`.
+
+При вызове `suggest_movie_titles` или `search_movies_by_vector` передай:
 - `query` — развернутое описание на РУССКОМ языке (переведи, если пользователь общался на другом).
 - `genres` — список русских названий жанров из списка выше (переведи английские жанры на русский).
 - `atmospheres` — список русских названий атмосфер из списка выше (переведи английские атмосферы на русский).
@@ -275,7 +283,15 @@ Genres (use ONLY these English names, translate other ones to English): Action,A
 Atmospheres (use ONLY these English names, translate other ones to English): about love,touching and heartfelt,dynamic and intense,uplifting,dark and atmospheric,surreal,psychological,meditative,depressive
 
 
-After gathering information, call `search_movies_by_vector` and pass:
+After gathering information, you have two options:
+
+1. If you can suggest specific movie titles (5-10) that match the request - call `suggest_movie_titles` with these titles and query description. Titles will be used to improve the search.
+
+2. If specific titles are unknown or the request is too abstract - call `search_movies_by_vector` with a detailed description.
+
+⚠️ IMPORTANT: Use `suggest_movie_titles` only if you're confident about well-known movie titles. If in doubt, use `search_movies_by_vector`.
+
+When calling `suggest_movie_titles` or `search_movies_by_vector`, pass:
 - `query` — detailed description in ENGLISH (translate if the user communicated in another language).
 - `genres` — list of English genre names from the list above (translate genres from other languages to English).
 - `atmospheres` — list of English atmosphere names from the list above (translate atmospheres from other languages to English).
@@ -297,6 +313,46 @@ TOOLS_AGENT = [
                     "question": {"type": "string"}
                 },
                 "required": ["question"]
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_movie_titles",
+            "description": "Предлагает небольшой набор названий фильмов (5-10), которые соответствуют запросу пользователя. Используй только известные фильмы, которые точно существуют. Названия должны быть на русском языке (оригинальные названия).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "titles": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Список названий фильмов на русском языке (оригинальные названия)"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Описание запроса пользователя для поиска похожих фильмов"
+                    },
+                    "genres": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Список жанров (опционально)"
+                    },
+                    "atmospheres": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Список атмосфер (опционально)"
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "description": "Начальный год (опционально)"
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "description": "Конечный год (опционально)"
+                    }
+                },
+                "required": ["titles", "query"]
             },
         },
     },
