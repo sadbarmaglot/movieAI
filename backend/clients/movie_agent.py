@@ -481,17 +481,16 @@ class MovieAgent:
                 f"KP IDs: {[m.get('kp_id') for m in movies[:20]]}{'...' if len(movies) > 20 else ''}"
             )
 
-            rerank_count = 0
             enriched_count = 0
             yielded_kp_ids = set()  # Отслеживаем уже выданные фильмы в этой сессии
             skipped_duplicates = 0
             skipped_excluded = 0
             
-            async for movie in self._rerank_movies_streaming(query, movies, locale=locale):
-                rerank_count += 1
+            # Итерация по результатам без rerank - используем порядок из Weaviate
+            for movie in movies:
                 kp_id = movie.get("kp_id")
                 logger.debug(
-                    f"[MovieAgent] Фильм после rerank #{rerank_count}: kp_id={kp_id}, "
+                    f"[MovieAgent] Обработка фильма: kp_id={kp_id}, "
                     f"name={movie.get('name') or movie.get('title', 'N/A')}"
                 )
                 
@@ -509,8 +508,7 @@ class MovieAgent:
                     skipped_excluded += 1
                     logger.warning(
                         f"[MovieAgent] Пропускаем фильм из exclude_set! "
-                        f"kp_id={kp_id} находится в exclude_set для user_id={user_id}, "
-                        f"но попал в результаты rerank"
+                        f"kp_id={kp_id} находится в exclude_set для user_id={user_id}"
                     )
                     continue
                 
@@ -548,8 +546,8 @@ class MovieAgent:
             
             logger.info(
                 f"[MovieAgent] Завершена выдача фильмов для user_id={user_id}: "
-                f"rerank={rerank_count}, enriched={enriched_count}, выдано={enriched_count}, "
+                f"обработано={len(movies)}, enriched={enriched_count}, выдано={enriched_count}, "
                 f"уникальных kp_ids: {len(yielded_kp_ids)}, "
-                f"пропущено дубликатов после rerank: {skipped_duplicates}, "
+                f"пропущено дубликатов: {skipped_duplicates}, "
                 f"пропущено из exclude_set: {skipped_excluded}"
             )
