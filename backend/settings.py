@@ -132,7 +132,7 @@ TOP_K_HYBRID = 1000
 TOP_K_SIMILAR = 1000
 TOP_K_SEARCH = 30
 MODEL_EMBS = "text-embedding-3-small"
-CLASS_NAME = "Movie_v2"  # Коллекция с расширенными метаданными
+CLASS_NAME = "Movie"  # Коллекция с расширенными метаданными
 WEAVIATE_HOST_HTTP = "weaviate"
 WEAVIATE_PORT_HTTP = 8080
 WEAVIATE_HOST_GRPC = "weaviate"
@@ -228,7 +228,7 @@ SYSTEM_PROMPT_AGENT_RU = """
 - Придумывай уточняющие описания самостоятельно, даже если пользователь сказал мало.
 - Стиль запроса — как краткое описание фильма на обложке.
 - ВСЕГДА переводи query на русский язык перед вызовом `search_movies_by_vector`.
-- ⚠️ ВАЖНО: Если пользователь упоминает актеров или режиссеров, обязательно включи их имена в query. Используй ОБА варианта имени (русский и английский), если известны оба. Например: "фильмы с Сидни Суини (Sydney Sweeney)" или "фильмы с Sydney Sweeney (Сидни Суини)". Это поможет найти фильмы, так как в базе имена актеров могут быть записаны на английском языке.
+- ⚠️ ВАЖНО: Если пользователь упоминает актеров или режиссеров, ОБЯЗАТЕЛЬНО добавь их имена в параметры `cast` или `directors` соответственно. Имена должны быть на английском языке, как они хранятся в базе данных. Также включи их имена в query для улучшения поиска. Например, если пользователь говорит "фильмы с Сидни Суини", добавь "Sydney Sweeney" в параметр `cast` и включи это имя в query.
 
 Не используй прямые цитаты, переформулируй естественно. Добавь атмосферу, жанры и смысловые маркеры, даже если пользователь их не сформулировал явно.
 
@@ -249,6 +249,8 @@ SYSTEM_PROMPT_AGENT_RU = """
 - `query` — развернутое описание на РУССКОМ языке (переведи, если пользователь общался на другом).
 - `genres` — список русских названий жанров из списка выше (переведи английские жанры на русский).
 - `atmospheres` — список русских названий атмосфер из списка выше (переведи английские атмосферы на русский).
+- `cast` — список имен актеров на АНГЛИЙСКОМ языке (если пользователь упоминает актеров).
+- `directors` — список имен режиссеров на АНГЛИЙСКОМ языке (если пользователь упоминает режиссеров).
 - `start_year`, `end_year` — если уверенно определил их по ответам.
 """
 
@@ -274,7 +276,7 @@ Your goals when formulating `query`:
 - Come up with clarifying descriptions yourself, even if the user said little.
 - Query style — like a brief movie description on a cover.
 - ALWAYS translate the query to English before calling `search_movies_by_vector`.
-- ⚠️ IMPORTANT: If the user mentions actors or directors, always include their names in the query. Use BOTH name variants (English and Russian) if both are known. For example: "movies with Sydney Sweeney (Сидни Суини)" or "movies with Сидни Суини (Sydney Sweeney)". This will help find movies, as actor names in the database may be written in English.
+- ⚠️ IMPORTANT: If the user mentions actors or directors, ALWAYS add their names to the `cast` or `directors` parameters respectively. Names must be in English, as they are stored in the database. Also include their names in the query to improve search. For example, if the user says "movies with Sydney Sweeney", add "Sydney Sweeney" to the `cast` parameter and include this name in the query.
 
 Don't use direct quotes, rephrase naturally. Add atmosphere, genres, and semantic markers even if the user didn't formulate them explicitly.
 
@@ -295,6 +297,8 @@ When calling `suggest_movie_titles` or `search_movies_by_vector`, pass:
 - `query` — detailed description in ENGLISH (translate if the user communicated in another language).
 - `genres` — list of English genre names from the list above (translate genres from other languages to English).
 - `atmospheres` — list of English atmosphere names from the list above (translate atmospheres from other languages to English).
+- `cast` — list of actor names in ENGLISH (if the user mentions actors).
+- `directors` — list of director names in ENGLISH (if the user mentions directors).
 - `start_year`, `end_year` — if you confidently determined them from responses.
 """
 
@@ -350,6 +354,16 @@ TOOLS_AGENT = [
                     "end_year": {
                         "type": "integer",
                         "description": "Конечный год (опционально)"
+                    },
+                    "cast": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Список имен актеров на английском языке (опционально). Если пользователь упоминает актера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
+                    },
+                    "directors": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Список имен режиссеров на английском языке (опционально). Если пользователь упоминает режиссера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
                     }
                 },
                 "required": ["titles", "query"]
@@ -368,7 +382,17 @@ TOOLS_AGENT = [
                     "genres": {"type": "array", "items": {"type": "string"}, "default": []},
                     "atmospheres": {"type": "array", "items": {"type": "string"}, "default": []},
                     "start_year": {"type": "integer", "default": 1900},
-                    "end_year": {"type": "integer", "default": 2025}
+                    "end_year": {"type": "integer", "default": 2025},
+                    "cast": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Список имен актеров на английском языке (опционально). Если пользователь упоминает актера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
+                    },
+                    "directors": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Список имен режиссеров на английском языке (опционально). Если пользователь упоминает режиссера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
+                    }
                 },
                 "required": ["query"]
             },

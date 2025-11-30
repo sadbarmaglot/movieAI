@@ -239,12 +239,10 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
     locale = data.get("locale", "ru")  # Получаем локализацию из запроса
     
     genres = data.get("genres")
-    logger.info(
-        f"[handle_movie_agent_streaming] Получены genres из data: {genres}, "
-        f"type: {type(genres)}, platform={platform}, locale={locale}"
-    )
     
     atmospheres = data.get("atmospheres")
+    cast = data.get("cast")
+    directors = data.get("directors")
     
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
@@ -254,6 +252,8 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
         atmospheres=atmospheres,
         start_year=data.get("start_year", 1900),
         end_year=data.get("end_year", 2025),
+        cast=cast,
+        directors=directors,
         locale=locale
     ):
         if websocket.application_state != WebSocketState.CONNECTED:
@@ -274,6 +274,8 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
 
     platform = data.get("platform", "telegram")
     locale = data.get("locale", "ru")
+    cast = data.get("cast")
+    directors = data.get("directors")
     
     async for movie in recommender.movie_generator(
         user_id=data["user_id"],
@@ -286,6 +288,8 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
         rating_kp=data.get("rating_kp", 5.0),
         rating_imdb=data.get("rating_imdb", 5.0),
         locale=locale,
+        cast=cast,
+        directors=directors,
     ):
         await websocket.send_text(json.dumps(movie, ensure_ascii=False))
 

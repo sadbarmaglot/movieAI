@@ -251,6 +251,8 @@ class MovieWeaviateRecommender:
         rating_imdb: float = 0.0,
         exclude_kp_ids: Optional[Set[int]] = None,
         locale: str = DEFAULT_LOCALE,
+        cast: Optional[List[str]] = None,
+        directors: Optional[List[str]] = None,
     ) -> List[dict]:
         """
         Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
@@ -260,7 +262,8 @@ class MovieWeaviateRecommender:
         exclude_set = exclude_kp_ids or set()
         logger.info(
             f"[WeaviateRecommender] recommend вызван: query='{query}', genres={genres}, "
-            f"years={start_year}-{end_year}, exclude_kp_ids={len(exclude_set)} фильмов "
+            f"years={start_year}-{end_year}, cast={cast}, directors={directors}, "
+            f"exclude_kp_ids={len(exclude_set)} фильмов "
             f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}"
         )
         
@@ -291,10 +294,22 @@ class MovieWeaviateRecommender:
         else:
             logger.debug(f"[WeaviateRecommender] Жанры не указаны, фильтр по жанрам не применяется")
 
+        # Фильтр по актерам (cast хранится на английском языке)
+        if cast is not None and len(cast) > 0:
+            cast_filter = Filter.by_property("cast").contains_any(cast)
+            filters = filters & cast_filter
+
+        # Фильтр по режиссерам (directors хранится на английском языке)
+        if directors is not None and len(directors) > 0:
+            directors_filter = Filter.by_property("directors").contains_any(directors)
+            filters = filters & directors_filter
+
         logger.debug(
             f"[WeaviateRecommender] Итоговые фильтры: year>{start_year} & year<{end_year} & "
             f"rating_kp>{rating_kp} & rating_imdb>{rating_imdb}"
             + (f" & genres filter" if genres else "")
+            + (f" & cast filter" if cast else "")
+            + (f" & directors filter" if directors else "")
         )
 
         results = await self._search_movies(
@@ -482,6 +497,8 @@ class MovieWeaviateRecommender:
             rating_kp: float = 5.0,
             rating_imdb: float = 5.0,
             locale: str = DEFAULT_LOCALE,
+            cast: Optional[List[str]] = None,
+            directors: Optional[List[str]] = None,
     ) -> AsyncGenerator[dict, None]:
         """
         Асинхронный генератор фильмов, отбираемых с учётом фильтров, истории пользователя и Weaviate.
@@ -503,6 +520,8 @@ class MovieWeaviateRecommender:
             end_year (int): Максимальный год выпуска.
             rating_kp (float): Минимальный рейтинг на Кинопоиске.
             rating_imdb (float): Минимальный рейтинг на IMDb.
+            cast (List[str], optional): Список имен актеров на английском языке для фильтрации.
+            directors (List[str], optional): Список имен режиссеров на английском языке для фильтрации.
 
         Возвращает:
             Асинхронный генератор объектов фильмов (dict), готовых к отправке в клиент.
@@ -537,7 +556,9 @@ class MovieWeaviateRecommender:
                     rating_kp=rating_kp,
                     rating_imdb=rating_imdb,
                     exclude_kp_ids=exclude_set,
-                    locale=locale
+                    locale=locale,
+                    cast=cast,
+                    directors=directors
                 )
 
             for movie in movies:

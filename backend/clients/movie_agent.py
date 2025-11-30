@@ -414,6 +414,8 @@ class MovieAgent:
                             "atmospheres": args.get("atmospheres", []),
                             "start_year": args.get("start_year", 1900),
                             "end_year": args.get("end_year", 2025),
+                            "cast": args.get("cast", []),
+                            "directors": args.get("directors", []),
                             "suggested_titles": titles  # Сохраняем для логирования
                         }
                         logger.info(
@@ -431,7 +433,9 @@ class MovieAgent:
                             "genres": args.get("genres", []),
                             "atmospheres": args.get("atmospheres", []),
                             "start_year": args.get("start_year", 1900),
-                            "end_year": args.get("end_year", 2025)
+                            "end_year": args.get("end_year", 2025),
+                            "cast": args.get("cast", []),
+                            "directors": args.get("directors", [])
                         }
                         logger.info(
                             f"[MovieAgent] QA запросил поиск фильмов: {search_params}"
@@ -467,7 +471,9 @@ class MovieAgent:
             genres: list = None,
             atmospheres: list = None,
             start_year: int = None,
-            end_year: int = None
+            end_year: int = None,
+            cast: list = None,
+            directors: list = None
     ) -> AsyncGenerator[dict, None]:
         """
         Поиск фильмов на основе финального запроса
@@ -500,7 +506,7 @@ class MovieAgent:
             logger.info(
                 f"[MovieAgent] run_movie_streaming: user_id={user_id}, platform={platform}, "
                 f"query='{query}', genres={genres}, years={start_year}-{end_year}, "
-                f"exclude_kp_ids={len(exclude_set)} фильмов"
+                f"cast={cast}, directors={directors}, exclude_kp_ids={len(exclude_set)} фильмов"
             )
 
             movies = await self.recommender.recommend(
@@ -508,6 +514,8 @@ class MovieAgent:
                 genres=genres,
                 start_year=start_year,
                 end_year=end_year,
+                cast=cast,
+                directors=directors,
                 exclude_kp_ids=exclude_set,
                 locale=locale
             )
