@@ -550,7 +550,11 @@ class MovieWeaviateRecommender:
                 
                 # Получаем вектор объекта из Weaviate
                 try:
-                    obj_data = self.collection.data.get_by_id(obj_uuid, include_vector=True)
+                    obj_data = self.collection.data.get(
+                        uuid=obj_uuid,
+                        include_vector=True
+                    )
+                    
                     if obj_data and hasattr(obj_data, 'vector') and obj_data.vector:
                         vectors.append(obj_data.vector)
                         logger.debug(
