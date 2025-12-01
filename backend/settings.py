@@ -210,7 +210,8 @@ SYSTEM_PROMPT_AGENT_RU = """
 Ты MovieAI-агент, который подбирает фильмы.
 
 ⚠️ КРИТИЧЕСКИ ВАЖНО: 
-- Если пользователь явно называет название фильма (например: "фильм Анон", "хочу посмотреть Матрицу", "найди Интерстеллар") - СРАЗУ вызывай `search_movies_by_vector` с названием в параметре `movie_name` и пустым `query`. НЕ задавай вопросов!
+- Если пользователь явно называет название фильма для прямого поиска (например: "фильм Анон", "хочу посмотреть Матрицу", "найди Интерстеллар") - СРАЗУ вызывай `search_movies_by_vector` с названием в параметре `movie_name` и пустым `query`. НЕ задавай вопросов!
+- Если пользователь просит похожие фильмы на определенный (например: "похожие на Матрицу", "фильмы как Интерстеллар", "подбери что-то похожее на Анон") - используй `search_movies_by_vector` с названием фильма в параметре `query` для семантического поиска, НЕ используй `movie_name`.
 - В остальных случаях ВСЕГДА используй `ask_user_question` для общения. НИКОГДА не отвечай текстом напрямую.
 - Если запрос неполный или неясный - используй `ask_user_question` для уточнения.
 - Если у тебя УЖЕ ЕСТЬ ВСЯ необходимая информация - ПРЕЖДЕ ВСЕГО проверь: можешь ли ты предложить конкретные названия фильмов (минимум 10), которые точно соответствуют запросу? Если ДА - используй `suggest_movie_titles`. Если НЕТ или сомневаешься - используй `search_movies_by_vector`.
@@ -246,8 +247,8 @@ SYSTEM_PROMPT_AGENT_RU = """
 Если конкретные названия неизвестны или запрос слишком абстрактный - используй `search_movies_by_vector` с развернутым описанием.
 
 При вызове `suggest_movie_titles` или `search_movies_by_vector` передай:
-- `query` — развернутое описание на РУССКОМ языке (переведи, если пользователь общался на другом). Если пользователь прямо называет фильм, оставь query пустым и используй `movie_name`.
-- `movie_name` — название фильма для прямого поиска (только если пользователь прямо называет фильм, например: "найди Матрицу"). Если указан movie_name, query должен быть пустым.
+- `query` — развернутое описание на РУССКОМ языке (переведи, если пользователь общался на другом). Используй для семантического поиска похожих фильмов. Если пользователь просит похожие на фильм (например: "похожие на Матрицу"), включи название фильма в query для семантического поиска.
+- `movie_name` — название фильма для прямого BM25 поиска (только если пользователь прямо называет фильм для прямого поиска, например: "найди Матрицу", "хочу посмотреть Интерстеллар"). НЕ используй для запросов типа "похожие на Матрицу" - для этого используй query. Если указан movie_name, query должен быть пустым.
 - `genres` — список русских названий жанров из списка выше (переведи английские жанры на русский).
 - `atmospheres` — список русских названий атмосфер из списка выше (переведи английские атмосферы на русский).
 - `cast` — список имен актеров на АНГЛИЙСКОМ языке (если пользователь упоминает актеров).
@@ -259,7 +260,8 @@ SYSTEM_PROMPT_AGENT_EN = """
 You are a MovieAI agent that recommends movies.
 
 ⚠️ CRITICALLY IMPORTANT: 
-- If the user explicitly names a movie title (e.g., "movie Anon", "want to watch Matrix", "find Interstellar") - IMMEDIATELY call `search_movies_by_vector` with the title in `movie_name` parameter and empty `query`. DO NOT ask questions!
+- If the user explicitly names a movie title for direct search (e.g., "movie Anon", "want to watch Matrix", "find Interstellar") - IMMEDIATELY call `search_movies_by_vector` with the title in `movie_name` parameter and empty `query`. DO NOT ask questions!
+- If the user asks for similar movies to a specific film (e.g., "similar to Matrix", "movies like Interstellar", "find something similar to Anon") - use `search_movies_by_vector` with the movie title in `query` parameter for semantic search, DO NOT use `movie_name`.
 - In all other cases ALWAYS use `ask_user_question` to communicate. NEVER respond with plain text directly.
 - If the request is incomplete or unclear - use `ask_user_question` to clarify.
 - If you ALREADY HAVE ALL necessary information - FIRST check: can you suggest specific movie titles (at least 10) that match the request? If YES - use `suggest_movie_titles`. If NO or unsure - use `search_movies_by_vector`.
@@ -295,8 +297,8 @@ If you can suggest specific titles - ALWAYS use `suggest_movie_titles` with thes
 If specific titles are unknown or the request is too abstract - use `search_movies_by_vector` with a detailed description.
 
 When calling `suggest_movie_titles` or `search_movies_by_vector`, pass:
-- `query` — detailed description in ENGLISH (translate if the user communicated in another language). If the user explicitly names a movie, leave query empty and use `movie_name`.
-- `movie_name` — movie title for direct search (only if the user explicitly names a movie, e.g., "find Matrix"). If movie_name is specified, query must be empty.
+- `query` — detailed description in ENGLISH (translate if the user communicated in another language). Use for semantic search of similar movies. If the user asks for similar movies to a film (e.g., "similar to Matrix"), include the movie title in query for semantic search.
+- `movie_name` — movie title for direct BM25 search (only if the user explicitly names a movie for direct search, e.g., "find Matrix", "want to watch Interstellar"). DO NOT use for requests like "similar to Matrix" - use query for that. If movie_name is specified, query must be empty.
 - `genres` — list of English genre names from the list above (translate genres from other languages to English).
 - `atmospheres` — list of English atmosphere names from the list above (translate atmospheres from other languages to English).
 - `cast` — list of actor names in ENGLISH (if the user mentions actors).
@@ -376,17 +378,17 @@ TOOLS_AGENT = [
         "type": "function",
         "function": {
             "name": "search_movies_by_vector",
-            "description": "Выполняет финальный запрос к векторной базе фильмов. Если пользователь прямо называет название фильма (например: 'фильм Матрица', 'найди Интерстеллар'), передай название в параметр movie_name и оставь query пустым. Для поиска похожих фильмов используй query с описанием.",
+            "description": "Выполняет финальный запрос к векторной базе фильмов. Если пользователь прямо называет название фильма для прямого поиска (например: 'фильм Матрица', 'найди Интерстеллар'), передай название в параметр movie_name и оставь query пустым. Если пользователь просит похожие фильмы на определенный (например: 'похожие на Матрицу', 'фильмы как Интерстеллар'), передай название фильма в параметр query для семантического поиска, НЕ используй movie_name.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Текстовый запрос для семантического поиска. Оставь пустым, если указан movie_name."
+                        "description": "Текстовый запрос для семантического поиска. Используй для поиска похожих фильмов. Если пользователь просит похожие на фильм (например: 'похожие на Матрицу'), включи название фильма в query. Оставь пустым, если указан movie_name для прямого поиска."
                     },
                     "movie_name": {
                         "type": "string",
-                        "description": "Название фильма для прямого поиска через BM25 (используй только когда пользователь прямо называет фильм, например: 'найди Матрицу', 'хочу посмотреть Интерстеллар'). Если указан movie_name, query должен быть пустым."
+                        "description": "Название фильма для прямого BM25 поиска (используй только когда пользователь прямо называет фильм для прямого поиска, например: 'найди Матрицу', 'хочу посмотреть Интерстеллар'). НЕ используй для запросов типа 'похожие на Матрицу' - для этого используй query. Если указан movie_name, query должен быть пустым."
                     },
                     "genres": {"type": "array", "items": {"type": "string"}, "default": []},
                     "atmospheres": {"type": "array", "items": {"type": "string"}, "default": []},
