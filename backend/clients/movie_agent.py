@@ -429,7 +429,8 @@ class MovieAgent:
                     elif tool_call.function.name == "search_movies_by_vector":
                         args = json.loads(tool_call.function.arguments)
                         search_params = {
-                            "query": args["query"],
+                            "query": args.get("query", ""),
+                            "movie_name": args.get("movie_name"),
                             "genres": args.get("genres", []),
                             "atmospheres": args.get("atmospheres", []),
                             "start_year": args.get("start_year", 1900),
@@ -474,7 +475,8 @@ class MovieAgent:
             end_year: int = None,
             cast: list = None,
             directors: list = None,
-            suggested_titles: list = None
+            suggested_titles: list = None,
+            movie_name: str = None
     ) -> AsyncGenerator[dict, None]:
         """
         Поиск фильмов на основе финального запроса
@@ -506,7 +508,7 @@ class MovieAgent:
 
             logger.info(
                 f"[MovieAgent] run_movie_streaming: user_id={user_id}, platform={platform}, "
-                f"query='{query}', genres={genres}, years={start_year}-{end_year}, "
+                f"query='{query}', movie_name='{movie_name}', genres={genres}, years={start_year}-{end_year}, "
                 f"cast={cast}, directors={directors}, exclude_kp_ids={len(exclude_set)} фильмов, "
                 f"suggested_titles={suggested_titles}"
             )
@@ -520,7 +522,8 @@ class MovieAgent:
                 directors=directors,
                 exclude_kp_ids=exclude_set,
                 locale=locale,
-                suggested_titles=suggested_titles
+                suggested_titles=suggested_titles,
+                movie_name=movie_name
             )
 
             logger.info(

@@ -243,7 +243,8 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
     atmospheres = data.get("atmospheres")
     cast = data.get("cast")
     directors = data.get("directors")
-    suggested_titles = data.get("suggested_titles")  # Получаем suggested_titles из запроса
+    suggested_titles = data.get("suggested_titles")
+    movie_name = data.get("movie_name")
     
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
@@ -256,7 +257,8 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
         cast=cast,
         directors=directors,
         locale=locale,
-        suggested_titles=suggested_titles
+        suggested_titles=suggested_titles,
+        movie_name=movie_name
     ):
         if websocket.application_state != WebSocketState.CONNECTED:
             break

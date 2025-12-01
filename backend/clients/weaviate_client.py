@@ -255,6 +255,7 @@ class MovieWeaviateRecommender:
         cast: Optional[List[str]] = None,
         directors: Optional[List[str]] = None,
         suggested_titles: Optional[List[str]] = None,
+        movie_name: Optional[str] = None,
     ) -> List[dict]:
         """
         Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
@@ -269,12 +270,34 @@ class MovieWeaviateRecommender:
         """
         exclude_set = exclude_kp_ids or set()
         logger.info(
-            f"[WeaviateRecommender] recommend вызван: query='{query}', genres={genres}, "
+            f"[WeaviateRecommender] recommend вызван: query='{query}', movie_name='{movie_name}', genres={genres}, "
             f"years={start_year}-{end_year}, cast={cast}, directors={directors}, "
             f"exclude_kp_ids={len(exclude_set)} фильмов "
             f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}, "
             f"suggested_titles={suggested_titles}"
         )
+        
+        if movie_name and (not query or query.strip() == ""):
+            logger.info(
+                f"[WeaviateRecommender] Выполняем BM25 поиск по названию: movie_name='{movie_name}', locale={locale}"
+            )
+            movies_by_title = await self.find_movies_by_title(
+                title=movie_name,
+                locale=locale,
+                min_score=0.5
+            )
+            
+            if not movies_by_title:
+                logger.warning(
+                    f"[WeaviateRecommender] Фильм '{movie_name}' не найден через BM25 поиск"
+                )
+                return []
+            
+            logger.info(
+                f"[WeaviateRecommender] BM25 поиск вернул {len(movies_by_title)} фильмов по названию '{movie_name}'"
+            )
+            
+            return movies_by_title
         
         filters = Filter.by_property("year").greater_than(start_year) & \
                   Filter.by_property("year").less_than(end_year) & \
