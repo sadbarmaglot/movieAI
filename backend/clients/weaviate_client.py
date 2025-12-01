@@ -556,11 +556,35 @@ class MovieWeaviateRecommender:
                     )
                     
                     if obj_data and hasattr(obj_data, 'vector') and obj_data.vector:
-                        vectors.append(obj_data.vector)
-                        logger.debug(
-                            f"[get_movie_vectors_by_kp_ids] Получен вектор для kp_id={kp_id}, "
-                            f"размерность: {len(obj_data.vector)}"
-                        )
+                        vector = obj_data.vector
+                        
+                        # Проверяем тип вектора - может быть dict или list
+                        if isinstance(vector, dict):
+                            # Если вектор в формате dict, извлекаем значения
+                            # В Weaviate вектор может быть в формате {"default": [0.1, 0.2, ...]}
+                            if "default" in vector:
+                                vector = vector["default"]
+                            elif len(vector) > 0:
+                                # Берем первый ключ, если есть
+                                first_key = list(vector.keys())[0]
+                                vector = vector[first_key]
+                            else:
+                                logger.warning(
+                                    f"[get_movie_vectors_by_kp_ids] Вектор для kp_id={kp_id} в неожиданном формате dict: {vector}"
+                                )
+                                continue
+                        
+                        # Проверяем, что вектор - это список чисел
+                        if isinstance(vector, list) and len(vector) > 0:
+                            vectors.append(vector)
+                            logger.debug(
+                                f"[get_movie_vectors_by_kp_ids] Получен вектор для kp_id={kp_id}, "
+                                f"размерность: {len(vector)}"
+                            )
+                        else:
+                            logger.warning(
+                                f"[get_movie_vectors_by_kp_ids] Вектор для kp_id={kp_id} не является списком: {type(vector)}"
+                            )
                     else:
                         logger.warning(
                             f"[get_movie_vectors_by_kp_ids] Не удалось получить вектор для kp_id={kp_id}, "
