@@ -256,7 +256,6 @@ class MovieWeaviateRecommender:
         directors: Optional[List[str]] = None,
         suggested_titles: Optional[List[str]] = None,
         movie_name: Optional[str] = None,
-        find_similar: bool = False,
     ) -> List[dict]:
         """
         Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
@@ -271,14 +270,14 @@ class MovieWeaviateRecommender:
         """
         exclude_set = exclude_kp_ids or set()
         logger.info(
-            f"[WeaviateRecommender] recommend вызван: query='{query}', movie_name='{movie_name}', find_similar={find_similar}, "
+            f"[WeaviateRecommender] recommend вызван: query='{query}', movie_name='{movie_name}', "
             f"genres={genres}, years={start_year}-{end_year}, cast={cast}, directors={directors}, "
             f"exclude_kp_ids={len(exclude_set)} фильмов "
             f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}, "
             f"suggested_titles={suggested_titles}"
         )
         
-        if movie_name and find_similar:
+        if movie_name and query and query.strip():
             logger.info(
                 f"[WeaviateRecommender] Поиск похожих фильмов на '{movie_name}' через BM25 + векторный поиск"
             )
@@ -882,7 +881,10 @@ class MovieWeaviateRecommender:
                     continue
 
                 distance = obj.metadata.distance
-                adjusted_distance = distance * (1 + penalty_weight * math.log1p(10 - dynamic_score))
+                # Ограничиваем dynamic_score сверху значением 10, чтобы избежать math domain error
+                # при вычислении log1p(10 - dynamic_score)
+                score_diff = max(0.0, 10.0 - min(dynamic_score, 10.0))
+                adjusted_distance = distance * (1 + penalty_weight * math.log1p(score_diff))
 
                 movie_dict["adjusted_distance"] = adjusted_distance
                 movies.append(movie_dict)

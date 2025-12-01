@@ -428,21 +428,15 @@ class MovieAgent:
                         return
                     elif tool_call.function.name == "search_movies_by_vector":
                         args = json.loads(tool_call.function.arguments)
-                        movie_name = args.get("movie_name")
-                        query = args.get("query", "")
-                        
-                        find_similar = bool(movie_name and query and query.strip())
-                        
                         search_params = {
-                            "query": query,
-                            "movie_name": movie_name,
+                            "query": args.get("query", ""),
+                            "movie_name": args.get("movie_name"),
                             "genres": args.get("genres", []),
                             "atmospheres": args.get("atmospheres", []),
                             "start_year": args.get("start_year", 1900),
                             "end_year": args.get("end_year", 2025),
                             "cast": args.get("cast", []),
-                            "directors": args.get("directors", []),
-                            "find_similar": find_similar
+                            "directors": args.get("directors", [])
                         }
                         logger.info(
                             f"[MovieAgent] QA запросил поиск фильмов: {search_params}"
@@ -482,8 +476,7 @@ class MovieAgent:
             cast: list = None,
             directors: list = None,
             suggested_titles: list = None,
-            movie_name: str = None,
-            find_similar: bool = False
+            movie_name: str = None
     ) -> AsyncGenerator[dict, None]:
         """
         Поиск фильмов на основе финального запроса
@@ -515,7 +508,7 @@ class MovieAgent:
 
             logger.info(
                 f"[MovieAgent] run_movie_streaming: user_id={user_id}, platform={platform}, "
-                f"query='{query}', movie_name='{movie_name}', find_similar={find_similar}, genres={genres}, years={start_year}-{end_year}, "
+                f"query='{query}', movie_name='{movie_name}', genres={genres}, years={start_year}-{end_year}, "
                 f"cast={cast}, directors={directors}, exclude_kp_ids={len(exclude_set)} фильмов, "
                 f"suggested_titles={suggested_titles}"
             )
@@ -530,8 +523,7 @@ class MovieAgent:
                 exclude_kp_ids=exclude_set,
                 locale=locale,
                 suggested_titles=suggested_titles,
-                movie_name=movie_name,
-                find_similar=find_similar
+                movie_name=movie_name
             )
 
             logger.info(
