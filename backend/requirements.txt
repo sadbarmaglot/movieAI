@@ -13,7 +13,7 @@ python-telegram-bot==22.1
 scikit-learn==1.6.1
 pillow==11.2.1
 openai==1.84.0
-weaviate-client==4.15.0
+weaviate-client==4.18.2
 protobuf>=5.26.1,<6.0.0
 langchain==0.3.25
 langchain-community==0.3.24
