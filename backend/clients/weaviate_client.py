@@ -256,6 +256,7 @@ class MovieWeaviateRecommender:
         directors: Optional[List[str]] = None,
         suggested_titles: Optional[List[str]] = None,
         movie_name: Optional[str] = None,
+        find_similar: bool = False,
     ) -> List[dict]:
         """
         Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
@@ -270,12 +271,54 @@ class MovieWeaviateRecommender:
         """
         exclude_set = exclude_kp_ids or set()
         logger.info(
-            f"[WeaviateRecommender] recommend вызван: query='{query}', movie_name='{movie_name}', genres={genres}, "
-            f"years={start_year}-{end_year}, cast={cast}, directors={directors}, "
+            f"[WeaviateRecommender] recommend вызван: query='{query}', movie_name='{movie_name}', find_similar={find_similar}, "
+            f"genres={genres}, years={start_year}-{end_year}, cast={cast}, directors={directors}, "
             f"exclude_kp_ids={len(exclude_set)} фильмов "
             f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}, "
             f"suggested_titles={suggested_titles}"
         )
+        
+        if movie_name and find_similar:
+            logger.info(
+                f"[WeaviateRecommender] Поиск похожих фильмов на '{movie_name}' через BM25 + векторный поиск"
+            )
+
+            movies_by_title = await self.find_movies_by_title(
+                title=movie_name,
+                locale=locale,
+                min_score=0.5
+            )
+            
+            if not movies_by_title:
+                logger.warning(
+                    f"[WeaviateRecommender] Фильм '{movie_name}' не найден через BM25 поиск"
+                )
+                return []
+            
+            source_movie = movies_by_title[0]
+            source_kp_id = source_movie.get("kp_id")
+            
+            if not source_kp_id:
+                logger.warning(
+                    f"[WeaviateRecommender] Найденный фильм '{movie_name}' не имеет kp_id"
+                )
+                return []
+            
+            logger.info(
+                f"[WeaviateRecommender] Найден фильм '{movie_name}' с kp_id={source_kp_id}, "
+                f"ищем похожие фильмы"
+            )
+            
+            similar_movies = await self.recommend_similar(
+                source_kp_id=source_kp_id,
+                exclude_kp_ids=exclude_set
+            )
+            
+            logger.info(
+                f"[WeaviateRecommender] Найдено {len(similar_movies)} похожих фильмов на '{movie_name}'"
+            )
+            
+            return similar_movies
         
         if movie_name and (not query or query.strip() == ""):
             logger.info(
