@@ -348,21 +348,30 @@ class MovieWeaviateRecommender:
             found_kp_ids = set()
             
             for title in suggested_titles:
-                # Пробуем найти на русском
                 movies_ru = await self.find_movies_by_title(title, locale="ru", min_score=0.5)
-                for movie in movies_ru:
+                if movies_ru and len(movies_ru) > 0:
+                    movie = movies_ru[0]
                     kp_id = movie.get("kp_id")
                     if kp_id and kp_id not in found_kp_ids:
                         found_movies.append(movie)
                         found_kp_ids.add(kp_id)
+                        logger.debug(
+                            f"[WeaviateRecommender] Добавлен фильм для '{title}' (ru): "
+                            f"kp_id={kp_id}, name={movie.get('name', 'N/A')}"
+                        )
+                        continue
                 
-                # Пробуем найти на английском
                 movies_en = await self.find_movies_by_title(title, locale="en", min_score=0.5)
-                for movie in movies_en:
+                if movies_en and len(movies_en) > 0:
+                    movie = movies_en[0]
                     kp_id = movie.get("kp_id")
                     if kp_id and kp_id not in found_kp_ids:
                         found_movies.append(movie)
                         found_kp_ids.add(kp_id)
+                        logger.debug(
+                            f"[WeaviateRecommender] Добавлен фильм для '{title}' (en): "
+                            f"kp_id={kp_id}, title={movie.get('title', 'N/A')}"
+                        )
             
             logger.info(
                 f"[WeaviateRecommender] Найдено {len(found_movies)} уникальных фильмов "
