@@ -1,5 +1,6 @@
 import math
 import logging
+import numpy as np
 
 from typing import Optional, List, Set, AsyncGenerator
 from openai import AsyncOpenAI
@@ -253,18 +254,26 @@ class MovieWeaviateRecommender:
         locale: str = DEFAULT_LOCALE,
         cast: Optional[List[str]] = None,
         directors: Optional[List[str]] = None,
+        suggested_titles: Optional[List[str]] = None,
     ) -> List[dict]:
         """
         Рекомендует фильмы на основе гибридного (векторного + keyword) или обычного фильтрационного поиска,
         с учётом жанров, годов, рейтингов и исключённых фильмов. Возвращает отсортированные результаты
         по кастомному скору (popularity_score), с дополнительной фильтрацией по конфликту жанров.
-                """
+        
+        Если указаны suggested_titles, дополнительно:
+        - Находит фильмы по названиям (на русском и английском)
+        - Усредняет их векторы
+        - Находит ближайшие фильмы к среднему вектору
+        - Добавляет их в результаты
+        """
         exclude_set = exclude_kp_ids or set()
         logger.info(
             f"[WeaviateRecommender] recommend вызван: query='{query}', genres={genres}, "
             f"years={start_year}-{end_year}, cast={cast}, directors={directors}, "
             f"exclude_kp_ids={len(exclude_set)} фильмов "
-            f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}"
+            f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}, "
+            f"suggested_titles={suggested_titles}"
         )
         
         filters = Filter.by_property("year").greater_than(start_year) & \
@@ -312,15 +321,93 @@ class MovieWeaviateRecommender:
             + (f" & directors filter" if directors else "")
         )
 
-        results = await self._search_movies(
-            query=query,
-            alpha=0.95,
-            fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
-            result_limit=100,
-            filters=filters,
-            genres=genres,
-            exclude_kp_ids=exclude_kp_ids
-        )
+        # ВРЕМЕННО: Если есть suggested_titles, возвращаем ТОЛЬКО результаты векторного поиска
+        if suggested_titles and len(suggested_titles) > 0:
+            # Пропускаем основной поиск, возвращаем только векторные результаты
+            results = []
+        else:
+            # Основной поиск (если нет suggested_titles)
+            results = await self._search_movies(
+                query=query,
+                alpha=0.95,
+                fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
+                result_limit=100,
+                filters=filters,
+                genres=genres,
+                exclude_kp_ids=exclude_kp_ids
+            )
+        
+        # Если есть suggested_titles, находим фильмы по названиям и усредняем их векторы
+        if suggested_titles and len(suggested_titles) > 0:
+            logger.info(
+                f"[WeaviateRecommender] Обработка suggested_titles: {suggested_titles}"
+            )
+            
+            # Находим фильмы по названиям (пробуем и русский, и английский)
+            found_movies = []
+            found_kp_ids = set()
+            
+            for title in suggested_titles:
+                # Пробуем найти на русском
+                movies_ru = await self.find_movies_by_title(title, locale="ru", min_score=0.5)
+                for movie in movies_ru:
+                    kp_id = movie.get("kp_id")
+                    if kp_id and kp_id not in found_kp_ids:
+                        found_movies.append(movie)
+                        found_kp_ids.add(kp_id)
+                
+                # Пробуем найти на английском
+                movies_en = await self.find_movies_by_title(title, locale="en", min_score=0.5)
+                for movie in movies_en:
+                    kp_id = movie.get("kp_id")
+                    if kp_id and kp_id not in found_kp_ids:
+                        found_movies.append(movie)
+                        found_kp_ids.add(kp_id)
+            
+            logger.info(
+                f"[WeaviateRecommender] Найдено {len(found_movies)} уникальных фильмов "
+                f"по suggested_titles: {list(found_kp_ids)[:10]}{'...' if len(found_kp_ids) > 10 else ''}"
+            )
+            
+            # Если нашли фильмы, получаем их векторы из Weaviate и усредняем
+            if found_movies:
+                # Получаем kp_ids найденных фильмов
+                found_kp_ids_list = list(found_kp_ids)
+                
+                # Получаем векторы из Weaviate по kp_ids
+                vectors = await self.get_movie_vectors_by_kp_ids(found_kp_ids_list)
+                
+                if vectors and len(vectors) > 0:
+                    avg_vector = self.average_vectors(vectors)
+                    
+                    if avg_vector:
+                        # Находим ближайшие фильмы к среднему вектору
+                        similar_movies = await self.find_similar_by_vector(
+                            vector=avg_vector,
+                            limit=30,
+                            exclude_kp_ids=exclude_kp_ids,
+                            filters=filters
+                        )
+                        
+                        # ВРЕМЕННО: Возвращаем ТОЛЬКО результаты векторного поиска (без объединения с основным)
+                        results = similar_movies
+                        
+                        logger.info(
+                            f"[WeaviateRecommender] ВРЕМЕННО: Возвращаем ТОЛЬКО {len(similar_movies)} фильмов "
+                            f"из векторного поиска по suggested_titles (без основного поиска)"
+                        )
+                    else:
+                        logger.warning(
+                            f"[WeaviateRecommender] Не удалось усреднить векторы для suggested_titles"
+                        )
+                else:
+                    logger.warning(
+                        f"[WeaviateRecommender] Не удалось получить векторы из Weaviate для найденных фильмов"
+                    )
+            else:
+                logger.warning(
+                    f"[WeaviateRecommender] Не найдено фильмов по suggested_titles: {suggested_titles}"
+                )
         
         result_kp_ids = [m.get("kp_id") for m in results]
         excluded_in_results = [kp_id for kp_id in result_kp_ids if kp_id in exclude_set]
@@ -363,6 +450,242 @@ class MovieWeaviateRecommender:
         except Exception as e:
             logger.warning(f"[get_movie_by_kp_id] Ошибка при получении фильма kp_id={kp_id}: {e}")
             return None
+
+    async def find_movies_by_title(
+        self,
+        title: str,
+        locale: str = "en",
+        min_score: float = 0.5
+    ) -> List[dict]:
+        """
+        Ищет фильмы по названию используя BM25 поиск (без нормализации).
+        Полагается на BM25 score для определения релевантности.
+        
+        Args:
+            title: Название фильма для поиска
+            locale: 'en' для поиска по 'title', 'ru' для поиска по 'name'
+            min_score: Минимальный BM25 score для считания результата релевантным
+            
+        Returns:
+            List[dict]: список найденных фильмов в формате _weaviate_to_movie_dict
+        """
+        try:
+            property_name = "title" if locale == "en" else "name"
+            
+            logger.info(
+                f"[find_movies_by_title] Поиск фильма: title='{title}', "
+                f"locale={locale}, property={property_name}, min_score={min_score}"
+            )
+            
+            results = self.collection.query.bm25(
+                query=title,
+                query_properties=[property_name],
+                limit=10,
+                return_metadata=["score"],
+                return_properties=self._return_properties()
+            )
+            
+            # Критерий 1: Пустой результат
+            if len(results.objects) == 0:
+                logger.info(
+                    f"[find_movies_by_title] Нет результатов для '{title}' "
+                    f"(locale={locale}, property={property_name})"
+                )
+                return []
+            
+            # Критерий 2: Низкий score первого результата
+            first_score = results.objects[0].metadata.score
+            if first_score < min_score:
+                logger.info(
+                    f"[find_movies_by_title] Низкий score ({first_score:.3f}) для '{title}', "
+                    f"считаем не найденным (min_score={min_score})"
+                )
+                return []
+            
+            # BM25 нашел релевантные результаты - возвращаем их
+            movies = []
+            for obj in results.objects:
+                movie_dict = self._weaviate_to_movie_dict(obj.properties)
+                movies.append(movie_dict)
+            
+            logger.info(
+                f"[find_movies_by_title] Найдено {len(movies)} фильмов для '{title}', "
+                f"лучший score: {first_score:.3f}"
+            )
+            
+            return movies
+            
+        except Exception as e:
+            logger.warning(f"[find_movies_by_title] Ошибка при поиске фильма '{title}': {e}")
+            return []
+
+    async def get_movie_vectors_by_kp_ids(self, kp_ids: List[int]) -> List[List[float]]:
+        """
+        Получает векторы фильмов из Weaviate по их kp_id.
+        
+        Args:
+            kp_ids: Список kp_id фильмов
+            
+        Returns:
+            List[List[float]]: список векторов фильмов из Weaviate
+        """
+        vectors = []
+        
+        try:
+            for kp_id in kp_ids:
+                # Получаем объект по kp_id
+                result = self.collection.query.fetch_objects(
+                    filters=Filter.by_property("kp_id").equal(kp_id),
+                    limit=1,
+                    return_properties=["kp_id"]  # Минимальные свойства, нам нужен только UUID
+                )
+                
+                if not result.objects:
+                    logger.warning(
+                        f"[get_movie_vectors_by_kp_ids] Фильм kp_id={kp_id} не найден, пропускаем"
+                    )
+                    continue
+                
+                obj_uuid = result.objects[0].uuid
+                
+                # Получаем вектор объекта из Weaviate
+                try:
+                    obj_data = self.collection.data.get_by_id(obj_uuid, include_vector=True)
+                    if obj_data and hasattr(obj_data, 'vector') and obj_data.vector:
+                        vectors.append(obj_data.vector)
+                        logger.debug(
+                            f"[get_movie_vectors_by_kp_ids] Получен вектор для kp_id={kp_id}, "
+                            f"размерность: {len(obj_data.vector)}"
+                        )
+                    else:
+                        logger.warning(
+                            f"[get_movie_vectors_by_kp_ids] Не удалось получить вектор для kp_id={kp_id}, "
+                            f"объект не содержит вектор"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"[get_movie_vectors_by_kp_ids] Ошибка при получении вектора для kp_id={kp_id}: {e}"
+                    )
+                    continue
+            
+            logger.info(
+                f"[get_movie_vectors_by_kp_ids] Получено {len(vectors)} векторов из {len(kp_ids)} запрошенных"
+            )
+            
+            return vectors
+            
+        except Exception as e:
+            logger.warning(f"[get_movie_vectors_by_kp_ids] Ошибка при получении векторов: {e}")
+            return []
+
+    @staticmethod
+    def average_vectors(vectors: List[List[float]]) -> Optional[List[float]]:
+        """
+        Усредняет список векторов.
+        
+        Args:
+            vectors: Список векторов одинаковой размерности
+            
+        Returns:
+            List[float]: усредненный вектор или None если векторов нет
+        """
+        if not vectors:
+            logger.warning("[average_vectors] Пустой список векторов")
+            return None
+        
+        if len(vectors) == 1:
+            return vectors[0]
+        
+        try:
+            # Проверяем, что все векторы одинаковой размерности
+            dim = len(vectors[0])
+            for i, vec in enumerate(vectors):
+                if len(vec) != dim:
+                    logger.warning(
+                        f"[average_vectors] Вектор {i} имеет размерность {len(vec)}, "
+                        f"ожидается {dim}, пропускаем"
+                    )
+                    continue
+            
+            # Усредняем векторы
+            avg_vector = np.mean(vectors, axis=0).tolist()
+            
+            logger.info(
+                f"[average_vectors] Усреднено {len(vectors)} векторов размерности {dim}"
+            )
+            
+            return avg_vector
+            
+        except Exception as e:
+            logger.warning(f"[average_vectors] Ошибка при усреднении векторов: {e}")
+            return None
+
+    async def find_similar_by_vector(
+        self,
+        vector: List[float],
+        limit: int = 30,
+        exclude_kp_ids: Optional[Set[int]] = None,
+        filters: Optional[Filter] = None
+    ) -> List[dict]:
+        """
+        Находит ближайшие фильмы к заданному вектору используя near_vector поиск.
+        
+        Args:
+            vector: Вектор для поиска
+            limit: Максимальное количество результатов
+            exclude_kp_ids: Множество kp_id для исключения
+            filters: Дополнительные фильтры Weaviate
+            
+        Returns:
+            List[dict]: список найденных фильмов в формате _weaviate_to_movie_dict
+        """
+        try:
+            exclude_set = exclude_kp_ids or set()
+            
+            logger.info(
+                f"[find_similar_by_vector] Поиск ближайших фильмов к вектору, "
+                f"limit={limit}, exclude_kp_ids={len(exclude_set)} фильмов"
+            )
+            
+            results = self.collection.query.near_vector(
+                near_vector=vector,
+                limit=limit + len(exclude_set),  # Берем больше, чтобы компенсировать исключения
+                return_metadata=["distance"],
+                return_properties=self._return_properties(),
+                filters=filters
+            )
+            
+            movies = []
+            excluded_count = 0
+            
+            for obj in results.objects:
+                props = obj.properties
+                kp_id = props.get("kp_id")
+                
+                if kp_id in exclude_set:
+                    excluded_count += 1
+                    logger.debug(
+                        f"[find_similar_by_vector] Фильм kp_id={kp_id} исключен "
+                        f"(находится в exclude_set)"
+                    )
+                    continue
+                
+                movie_dict = self._weaviate_to_movie_dict(props)
+                movies.append(movie_dict)
+                
+                if len(movies) >= limit:
+                    break
+            
+            logger.info(
+                f"[find_similar_by_vector] Найдено {len(movies)} фильмов, "
+                f"исключено: {excluded_count}"
+            )
+            
+            return movies
+            
+        except Exception as e:
+            logger.warning(f"[find_similar_by_vector] Ошибка при поиске по вектору: {e}")
+            return []
 
     async def recommend_similar(
             self,

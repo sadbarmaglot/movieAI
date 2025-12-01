@@ -473,7 +473,8 @@ class MovieAgent:
             start_year: int = None,
             end_year: int = None,
             cast: list = None,
-            directors: list = None
+            directors: list = None,
+            suggested_titles: list = None
     ) -> AsyncGenerator[dict, None]:
         """
         Поиск фильмов на основе финального запроса
@@ -506,7 +507,8 @@ class MovieAgent:
             logger.info(
                 f"[MovieAgent] run_movie_streaming: user_id={user_id}, platform={platform}, "
                 f"query='{query}', genres={genres}, years={start_year}-{end_year}, "
-                f"cast={cast}, directors={directors}, exclude_kp_ids={len(exclude_set)} фильмов"
+                f"cast={cast}, directors={directors}, exclude_kp_ids={len(exclude_set)} фильмов, "
+                f"suggested_titles={suggested_titles}"
             )
 
             movies = await self.recommender.recommend(
@@ -517,7 +519,8 @@ class MovieAgent:
                 cast=cast,
                 directors=directors,
                 exclude_kp_ids=exclude_set,
-                locale=locale
+                locale=locale,
+                suggested_titles=suggested_titles
             )
 
             logger.info(
