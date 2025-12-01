@@ -213,7 +213,7 @@ SYSTEM_PROMPT_AGENT_RU = """
 - Если пользователь явно называет название фильма (например: "фильм Анон", "хочу посмотреть Матрицу", "найди Интерстеллар") - СРАЗУ вызывай `search_movies_by_vector` с названием в query. НЕ задавай вопросов!
 - В остальных случаях ВСЕГДА используй `ask_user_question` для общения. НИКОГДА не отвечай текстом напрямую.
 - Если запрос неполный или неясный - используй `ask_user_question` для уточнения.
-- Если у тебя УЖЕ ЕСТЬ ВСЯ необходимая информация - ПРЕЖДЕ ВСЕГО проверь: можешь ли ты предложить конкретные названия фильмов (5-10), которые точно соответствуют запросу? Если ДА - используй `suggest_movie_titles`. Если НЕТ или сомневаешься - используй `search_movies_by_vector`.
+- Если у тебя УЖЕ ЕСТЬ ВСЯ необходимая информация - ПРЕЖДЕ ВСЕГО проверь: можешь ли ты предложить конкретные названия фильмов (минимум 10), которые точно соответствуют запросу? Если ДА - используй `suggest_movie_titles`. Если НЕТ или сомневаешься - используй `search_movies_by_vector`.
 
 Сначала собери информацию от пользователя через `ask_user_question`, но если он называет конкретный фильм - ищи сразу.
 
@@ -237,11 +237,11 @@ SYSTEM_PROMPT_AGENT_RU = """
 Атмосферы (используй ТОЛЬКО эти русские названия, переводи английские на русский): про любовь,душевный и трогательный,динамичный и напряженный,жизнеутверждающий,мрачный и атмосферный,сюрреалистичный,психологический,медитативный,депрессивный
 
 
-⚠️ ПРИОРИТЕТ: После сбора информации ПРЕЖДЕ ВСЕГО проверь - можешь ли ты предложить конкретные названия фильмов (5-10), которые точно соответствуют запросу?
+⚠️ ПРИОРИТЕТ: После сбора информации ПРЕЖДЕ ВСЕГО проверь - можешь ли ты предложить конкретные названия фильмов (минимум 10), которые точно соответствуют запросу?
 
-1. Если ты можешь предложить конкретные названия фильмов (5-10), которые точно соответствуют запросу - вызови `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
+1. Если ты можешь предложить конкретные названия фильмов (минимум 10), которые точно соответствуют запросу - вызови `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
 
-Если можешь предложить конкретные названия - ВСЕГДА используй `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
+Если можешь предложить конкретные названия (минимум 10) - ВСЕГДА используй `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
 
 Если конкретные названия неизвестны или запрос слишком абстрактный - используй `search_movies_by_vector` с развернутым описанием.
 
@@ -261,7 +261,7 @@ You are a MovieAI agent that recommends movies.
 - If the user explicitly names a movie title (e.g., "movie Anon", "want to watch Matrix", "find Interstellar") - IMMEDIATELY call `search_movies_by_vector` with the title in query. DO NOT ask questions!
 - In all other cases ALWAYS use `ask_user_question` to communicate. NEVER respond with plain text directly.
 - If the request is incomplete or unclear - use `ask_user_question` to clarify.
-- If you ALREADY HAVE ALL necessary information - FIRST check: can you suggest specific movie titles (5-10) that match the request? If YES - use `suggest_movie_titles`. If NO or unsure - use `search_movies_by_vector`.
+- If you ALREADY HAVE ALL necessary information - FIRST check: can you suggest specific movie titles (at least 10) that match the request? If YES - use `suggest_movie_titles`. If NO or unsure - use `search_movies_by_vector`.
 
 First gather information through `ask_user_question`, but if the user names a specific movie - search immediately.
 
@@ -285,9 +285,9 @@ Genres (use ONLY these English names, translate other ones to English): Action,A
 Atmospheres (use ONLY these English names, translate other ones to English): about love,touching and heartfelt,dynamic and intense,uplifting,dark and atmospheric,surreal,psychological,meditative,depressive
 
 
-⚠️ PRIORITY: After gathering information, FIRST check - can you suggest specific movie titles (5-10) that match the request?
+⚠️ PRIORITY: After gathering information, FIRST check - can you suggest specific movie titles (at least 10) that match the request?
 
-1. If you can suggest specific movie titles (5-10) that match the request - call `suggest_movie_titles` with these titles and query description. Titles will be used to improve the search.
+1. If you can suggest specific movie titles (at least 10) that match the request - call `suggest_movie_titles` with these titles and query description. Titles will be used to improve the search.
 
 If you can suggest specific titles - ALWAYS use `suggest_movie_titles` with these titles and query description. Titles will be used to improve the search.
 
@@ -324,7 +324,7 @@ TOOLS_AGENT = [
         "type": "function",
         "function": {
             "name": "suggest_movie_titles",
-            "description": "Предлагает небольшой набор названий фильмов (5-10), которые соответствуют запросу пользователя. Используй только известные фильмы, которые точно существуют. Названия должны быть на русском языке (оригинальные названия).",
+            "description": "Предлагает набор названий фильмов (минимум 10), которые соответствуют запросу пользователя. Используй только известные фильмы, которые точно существуют. Названия должны быть на русском языке (оригинальные названия).",
             "parameters": {
                 "type": "object",
                 "properties": {
