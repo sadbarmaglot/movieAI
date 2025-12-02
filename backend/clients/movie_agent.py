@@ -1,6 +1,7 @@
 import json
 import logging
 import asyncio
+import traceback
 
 from pydantic import BaseModel
 from fastapi import HTTPException
@@ -343,12 +344,53 @@ class MovieAgent:
             logger.debug(f"[MovieAgent] Добавлено сообщение пользователя в историю: '{user_input[:100]}...'")
 
         while True:
-            response = await self.openai_client.chat.completions.create(
-                model=self.model,
-                messages=self.messages,
-                tools=self.tools,
-                tool_choice="auto"
-            )
+            try:
+                # Валидация структуры сообщений перед отправкой
+                if self.messages:
+                    last_msg = self.messages[-1]
+                    last_role = last_msg.get("role")
+                    logger.debug(
+                        f"[MovieAgent] Отправляем запрос к OpenAI API: "
+                        f"model={self.model}, messages_count={len(self.messages)}, "
+                        f"last_message_role={last_role}"
+                    )
+                    # Логируем последние несколько сообщений для отладки
+                    if len(self.messages) > 3:
+                        logger.debug(
+                            f"[MovieAgent] Последние 3 сообщения: {self.messages[-3:]}"
+                        )
+                    # Проверка: если последнее сообщение - assistant с tool_calls,
+                    # убеждаемся что есть tool responses
+                    if last_role == "assistant" and "tool_calls" in last_msg:
+                        tool_call_ids = {tc["id"] for tc in last_msg["tool_calls"]}
+                        # Ищем tool responses после этого сообщения
+                        tool_responses = [
+                            msg for msg in self.messages 
+                            if msg.get("role") == "tool" and msg.get("tool_call_id") in tool_call_ids
+                        ]
+                        if len(tool_responses) < len(tool_call_ids):
+                            logger.warning(
+                                f"[MovieAgent] Не все tool calls имеют responses: "
+                                f"ожидается {len(tool_call_ids)}, найдено {len(tool_responses)}. "
+                                f"Tool call IDs: {tool_call_ids}"
+                            )
+                
+                response = await self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=self.messages,
+                    tools=self.tools,
+                    tool_choice="auto"
+                )
+            except Exception as e:
+                logger.error(
+                    f"[MovieAgent] Ошибка при вызове OpenAI API: {type(e).__name__}: {str(e)}\n"
+                    f"Messages count: {len(self.messages)}\n"
+                    f"Last 3 messages: {self.messages[-3:] if len(self.messages) >= 3 else self.messages}\n"
+                    f"Traceback: {traceback.format_exc()}"
+                )
+                # Попытка исправить проблему: если последнее сообщение - tool response без следующего user message,
+                # это может быть проблемой. Но в данном случае мы не добавляем user message при add_user_message=False
+                raise
 
             message = response.choices[0].message
             tool_calls = getattr(message, "tool_calls", None)
@@ -452,6 +494,12 @@ class MovieAgent:
                 )
                 logger.info(
                     f"[MovieAgent] Преобразуем текстовый ответ в вопрос через ask_user_question"
+                )
+                # Добавляем текстовый ответ ассистента в историю сообщений
+                self.messages.append({"role": "assistant", "content": content})
+                logger.debug(
+                    f"[MovieAgent] Текстовый ответ ассистента добавлен в историю сообщений, "
+                    f"всего сообщений: {len(self.messages)}"
                 )
                 yield {
                     "type": "question",
