@@ -98,7 +98,7 @@ KP_API_KEY = os.environ["KINOPOISK_API_KEY"]
 PROMPT_NUM_MOVIES = 20
 
 # clients.openai_client
-MODEL_QA = "gpt-4o"
+MODEL_QA = "gpt-5.1"
 TEMPERATURE_QA = 0.9
 MODEL_MOVIES = "gpt-4o-mini"
 TEMPERATURE_MOVIES = 0.9
