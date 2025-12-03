@@ -263,6 +263,9 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
         if websocket.application_state != WebSocketState.CONNECTED:
             break
         await websocket.send_json(result)
+    
+    if websocket.application_state == WebSocketState.CONNECTED:
+        await websocket.send_text("__END__")
 
 
 async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommender: MovieWeaviateRecommender):
