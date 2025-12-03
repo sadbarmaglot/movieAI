@@ -6,6 +6,7 @@ class AddFavoriteRequest(BaseModel):
     user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     movie_id: int
     platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
+    is_watched: Optional[bool] = False
 
 
 class GetFavoriteResponse(BaseModel):

@@ -38,7 +38,8 @@ async def add_favorite_movie(
     await favorite_manager.add_favorite(
         user_id=body.user_id, 
         kp_id=body.movie_id, 
-        platform=body.platform
+        platform=body.platform,
+        is_watched=body.is_watched or False
     )
 
 @router.post("/delete-favorites")

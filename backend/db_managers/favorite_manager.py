@@ -119,7 +119,7 @@ class FavoriteManager(BaseManager):
             ]
 
     @transactional
-    async def add_favorite(self, user_id: Union[int, str], kp_id: int, platform: str = "telegram") -> None:
+    async def add_favorite(self, user_id: Union[int, str], kp_id: int, platform: str = "telegram", is_watched: bool = False) -> None:
         """
         Добавляет фильм в избранное.
         
@@ -127,18 +127,19 @@ class FavoriteManager(BaseManager):
             user_id: ID пользователя (int для Telegram) или device_id (str для iOS)
             kp_id: ID фильма на Кинопоиске
             platform: 'telegram' or 'ios'
+            is_watched: Флаг просмотренного фильма (по умолчанию False)
         """
         # Выбираем таблицу в зависимости от платформы
         if platform == "ios":
             favorites_table = ios_favorite_movies
             user_field = ios_favorite_movies.c.device_id
             user_id_value = str(user_id)
-            values = {"device_id": user_id_value, "kp_id": kp_id}
+            values = {"device_id": user_id_value, "kp_id": kp_id, "iswatched": is_watched}
         else:
             favorites_table = favorite_movies
             user_field = favorite_movies.c.user_id
             user_id_value = int(user_id) if isinstance(user_id, str) else user_id
-            values = {"user_id": user_id_value, "kp_id": kp_id}
+            values = {"user_id": user_id_value, "kp_id": kp_id, "iswatched": is_watched}
         
         result = await self.session.execute(
             select(favorites_table).where(
@@ -153,7 +154,7 @@ class FavoriteManager(BaseManager):
             )
             logger.info(
                 f"[FavoriteManager] Фильм добавлен в favorites: user_id={user_id}, "
-                f"kp_id={kp_id}, platform={platform}"
+                f"kp_id={kp_id}, platform={platform}, is_watched={is_watched}"
             )
         else:
             logger.debug(
