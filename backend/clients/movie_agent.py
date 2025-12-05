@@ -389,12 +389,15 @@ class MovieAgent:
                     if tool_call.function.name == "ask_user_question":
                         args = json.loads(tool_call.function.arguments)
                         question = args["question"]
+                        suggestions = args.get("suggestions", [])
                         logger.info(
-                            f"[MovieAgent] QA задает вопрос пользователю: '{question}'"
+                            f"[MovieAgent] QA задает вопрос пользователю: '{question}', "
+                            f"suggestions={suggestions}"
                         )
                         yield {
                             "type": "question",
                             "question": question,
+                            "suggestions": suggestions,
                             "tool_call_id": tool_call.id
                         }
                         return
@@ -472,6 +475,7 @@ class MovieAgent:
                 yield {
                     "type": "question",
                     "question": content,
+                    "suggestions": [],  # Пустой массив, так как это fallback случай
                     "tool_call_id": None
                 }
                 return

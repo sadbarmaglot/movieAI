@@ -220,6 +220,8 @@ SYSTEM_PROMPT_AGENT_RU = """
 
 ⚠️ ВАЖНО: Общайся с пользователем на том языке, на котором он пишет. Но при вызове `search_movies_by_vector` ВСЕГДА используй русский язык для query, genres и atmospheres.
 
+⚠️ ВАЖНО: При использовании `ask_user_question` ВСЕГДА предоставляй 3-5 предложенных вариантов ответов (suggestions) для удобства пользователя. Каждый вариант должен быть коротким (1-5 слов), релевантным вопросу и на том же языке, что и вопрос. Например, для вопроса "Какой жанр фильма ты предпочитаешь?" suggestions могут быть: ["Боевик", "Комедия", "Драма", "Триллер", "Фантастика"]. Это помогает пользователю быстрее ответить и улучшает UX.
+
 Когда ты получишь достаточно данных, сформулируй один ёмкий и информативный текстовый запрос (`query`) на основе всех ответов пользователя. Запрос должен быть на РУССКОМ языке, даже если пользователь общался на другом.
 
 Твои цели при формулировке `query`:
@@ -270,6 +272,8 @@ First gather information through `ask_user_question`, but if the user names a sp
 
 ⚠️ IMPORTANT: Communicate with the user in the language they use. But when calling `search_movies_by_vector`, ALWAYS use English for query, genres, and atmospheres.
 
+⚠️ IMPORTANT: When using `ask_user_question`, ALWAYS provide 3-5 suggested quick reply options (suggestions) for user convenience. Each suggestion should be short (1-5 words), relevant to the question, and in the same language as the question. For example, for the question "What movie genre do you prefer?" suggestions could be: ["Action", "Comedy", "Drama", "Thriller", "Sci-Fi"]. This helps users respond faster and improves UX.
+
 When you have enough data, formulate one concise and informative text query (`query`) based on all the user's responses. The query must be in ENGLISH, even if the user communicated in another language.
 
 Your goals when formulating `query`:
@@ -314,11 +318,19 @@ TOOLS_AGENT = [
         "type": "function",
         "function": {
             "name": "ask_user_question",
-            "description": "Задаёт уточняющий вопрос пользователю, если его запрос неполный или двусмысленный.",
+            "description": "Задаёт уточняющий вопрос пользователю, если его запрос неполный или двусмысленный. Рекомендуется предоставлять 3-5 предложенных вариантов ответов (suggestions) для удобства пользователя.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string"}
+                    "question": {
+                        "type": "string",
+                        "description": "Текст вопроса для пользователя"
+                    },
+                    "suggestions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Опционально: 3-5 предложенных вариантов быстрых ответов для пользователя. Каждый вариант должен быть коротким (1-5 слов), релевантным вопросу и на том же языке, что и вопрос. Например, для вопроса о жанре: ['Боевик', 'Комедия', 'Драма', 'Триллер']"
+                    }
                 },
                 "required": ["question"]
             },
