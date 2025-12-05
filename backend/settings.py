@@ -212,6 +212,7 @@ SYSTEM_PROMPT_AGENT_RU = """
 ⚠️ КРИТИЧЕСКИ ВАЖНО: 
 - Если пользователь явно называет название фильма для прямого поиска (например: "фильм Анон", "хочу посмотреть Матрицу", "найди Интерстеллар") - СРАЗУ вызывай `search_movies_by_vector` с названием в параметре `movie_name` и пустым `query`. НЕ задавай вопросов!
 - Если пользователь просит похожие фильмы на определенный (например: "похожие на Матрицу", "фильмы как Интерстеллар", "подбери что-то похожее на Анон") - используй `search_movies_by_vector` с названием фильма в параметре `movie_name` и описание запроса в `query` (например: "похожие на Матрицу"). Система автоматически найдет фильм по названию и затем найдет похожие по вектору.
+- ⚠️ ОЧЕНЬ ВАЖНО: Если запрос содержит фразы типа "фильмы [фамилия]", "фильмы с [имя]", "фильмы от [имя]", "фильмы [имя]" (например: "фильмы нолана", "фильмы с тарантино", "фильмы от спилберга") - это ЗАПРОС ФИЛЬМОВ РЕЖИССЕРА ИЛИ АКТЕРА, а НЕ название фильма! НЕ используй `movie_name` для таких запросов. Вместо этого используй `directors` или `cast` соответственно. Распознай известных режиссеров (например: "Нолан" = "Christopher Nolan", "Тарантино" = "Quentin Tarantino", "Спилберг" = "Steven Spielberg") и актеров, переведи их имена на английский и добавь в соответствующий параметр.
 - В остальных случаях ВСЕГДА используй `ask_user_question` для общения. НИКОГДА не отвечай текстом напрямую.
 - Если запрос неполный или неясный - используй `ask_user_question` для уточнения.
 - Если у тебя УЖЕ ЕСТЬ ВСЯ необходимая информация - ПРЕЖДЕ ВСЕГО проверь: можешь ли ты предложить конкретные названия фильмов (минимум 10), которые точно соответствуют запросу? Если ДА - используй `suggest_movie_titles`. Если НЕТ или сомневаешься - используй `search_movies_by_vector`.
@@ -231,7 +232,7 @@ SYSTEM_PROMPT_AGENT_RU = """
 - Придумывай уточняющие описания самостоятельно, даже если пользователь сказал мало.
 - Стиль запроса — как краткое описание фильма на обложке.
 - ВСЕГДА переводи query на русский язык перед вызовом `search_movies_by_vector`.
-- ⚠️ ВАЖНО: Если пользователь упоминает актеров или режиссеров, ОБЯЗАТЕЛЬНО добавь их имена в параметры `cast` или `directors` соответственно. Имена должны быть на английском языке, как они хранятся в базе данных. Также включи их имена в query для улучшения поиска. Например, если пользователь говорит "фильмы с Сидни Суини", добавь "Sydney Sweeney" в параметр `cast` и включи это имя в query.
+- ⚠️ КРИТИЧЕСКИ ВАЖНО: Если пользователь упоминает актеров или режиссеров в ЛЮБОМ месте диалога (в начальном запросе или в ответах на вопросы), ОБЯЗАТЕЛЬНО извлеки их имена из всего контекста диалога и добавь в параметры `cast` или `directors` соответственно. Имена должны быть на АНГЛИЙСКОМ языке, как они хранятся в базе данных. Переведи русские имена на английские (например: "Бенедикт Камбербэтч" -> "Benedict Cumberbatch", "Сидни Суини" -> "Sydney Sweeney"). Также включи их имена в query для улучшения поиска. НИКОГДА не оставляй `cast` или `directors` пустыми, если в диалоге упоминались актеры или режиссеры!
 
 Не используй прямые цитаты, переформулируй естественно. Добавь атмосферу, жанры и смысловые маркеры, даже если пользователь их не сформулировал явно.
 
@@ -250,11 +251,11 @@ SYSTEM_PROMPT_AGENT_RU = """
 
 При вызове `suggest_movie_titles` или `search_movies_by_vector` передай:
 - `query` — развернутое описание на РУССКОМ языке (переведи, если пользователь общался на другом). Используй для семантического поиска. Если пользователь просит похожие на фильм (например: "похожие на Матрицу"), передай описание запроса в query (например: "похожие на Матрицу").
-- `movie_name` — название фильма для поиска. Используй в двух случаях: 1) для прямого поиска фильма (например: "найди Матрицу") - тогда query должен быть пустым; 2) для поиска похожих фильмов (например: "похожие на Матрицу") - тогда передай название в movie_name и описание в query, система найдет фильм по названию и затем похожие по вектору.
+- `movie_name` — название фильма для поиска. Используй ТОЛЬКО в двух случаях: 1) для прямого поиска фильма (например: "найди Матрицу", "хочу посмотреть Интерстеллар") - тогда query должен быть пустым; 2) для поиска похожих фильмов (например: "похожие на Матрицу") - тогда передай название в movie_name и описание в query, система найдет фильм по названию и затем похожие по вектору. НЕ используй `movie_name` для запросов типа "фильмы [фамилия]" - это запросы фильмов режиссера/актера, используй `directors`/`cast` вместо этого!
 - `genres` — список русских названий жанров из списка выше (переведи английские жанры на русский).
 - `atmospheres` — список русских названий атмосфер из списка выше (переведи английские атмосферы на русский).
-- `cast` — список имен актеров на АНГЛИЙСКОМ языке (если пользователь упоминает актеров).
-- `directors` — список имен режиссеров на АНГЛИЙСКОМ языке (если пользователь упоминает режиссеров).
+- `cast` — список имен актеров на АНГЛИЙСКОМ языке. ОБЯЗАТЕЛЬНО извлеки имена актеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Например: если пользователь упомянул "Бенедикт Камбербэтч" или "Камбербетч", добавь ["Benedict Cumberbatch"].
+- `directors` — список имен режиссеров на АНГЛИЙСКОМ языке. ОБЯЗАТЕЛЬНО извлеки имена режиссеров из ВСЕГО контекста диалога, переведи русские имена на английские и добавь в этот список. Распознай известных режиссеров по фамилиям (например: "Нолан" = "Christopher Nolan", "Тарантино" = "Quentin Tarantino", "Спилберг" = "Steven Spielberg").
 - `start_year`, `end_year` — если уверенно определил их по ответам.
 """
 
@@ -264,6 +265,7 @@ You are a MovieAI agent that recommends movies.
 ⚠️ CRITICALLY IMPORTANT: 
 - If the user explicitly names a movie title for direct search (e.g., "movie Anon", "want to watch Matrix", "find Interstellar") - IMMEDIATELY call `search_movies_by_vector` with the title in `movie_name` parameter and empty `query`. DO NOT ask questions!
 - If the user asks for similar movies to a specific film (e.g., "similar to Matrix", "movies like Interstellar", "find something similar to Anon") - use `search_movies_by_vector` with the movie title in `movie_name` parameter and the request description in `query` (e.g., "similar to Matrix"). The system will automatically find the film by title and then find similar ones by vector.
+- ⚠️ VERY IMPORTANT: If the request contains phrases like "movies [surname]", "films with [name]", "films by [name]", "films [name]" (e.g., "movies Nolan", "films with Tarantino", "films by Spielberg") - this is a REQUEST FOR DIRECTOR'S OR ACTOR'S FILMS, NOT a movie title! DO NOT use `movie_name` for such requests. Instead, use `directors` or `cast` respectively. Recognize famous directors (e.g., "Nolan" = "Christopher Nolan", "Tarantino" = "Quentin Tarantino", "Spielberg" = "Steven Spielberg") and actors, translate their names to English and add them to the appropriate parameter.
 - In all other cases ALWAYS use `ask_user_question` to communicate. NEVER respond with plain text directly.
 - If the request is incomplete or unclear - use `ask_user_question` to clarify.
 - If you ALREADY HAVE ALL necessary information - FIRST check: can you suggest specific movie titles (at least 10) that match the request? If YES - use `suggest_movie_titles`. If NO or unsure - use `search_movies_by_vector`.
@@ -283,7 +285,7 @@ Your goals when formulating `query`:
 - Come up with clarifying descriptions yourself, even if the user said little.
 - Query style — like a brief movie description on a cover.
 - ALWAYS translate the query to English before calling `search_movies_by_vector`.
-- ⚠️ IMPORTANT: If the user mentions actors or directors, ALWAYS add their names to the `cast` or `directors` parameters respectively. Names must be in English, as they are stored in the database. Also include their names in the query to improve search. For example, if the user says "movies with Sydney Sweeney", add "Sydney Sweeney" to the `cast` parameter and include this name in the query.
+- ⚠️ CRITICALLY IMPORTANT: If the user mentions actors or directors ANYWHERE in the dialogue (in the initial request or in answers to questions), ALWAYS extract their names from the ENTIRE dialogue context and add them to the `cast` or `directors` parameters respectively. Names must be in ENGLISH, as they are stored in the database. Translate non-English names to English (e.g., "Бенедикт Камбербэтч" -> "Benedict Cumberbatch"). Also include their names in the query to improve search. NEVER leave `cast` or `directors` empty if actors or directors were mentioned in the dialogue!
 
 Don't use direct quotes, rephrase naturally. Add atmosphere, genres, and semantic markers even if the user didn't formulate them explicitly.
 
@@ -302,11 +304,11 @@ If specific titles are unknown or the request is too abstract - use `search_movi
 
 When calling `suggest_movie_titles` or `search_movies_by_vector`, pass:
 - `query` — detailed description in ENGLISH (translate if the user communicated in another language). Use for semantic search. If the user asks for similar movies to a film (e.g., "similar to Matrix"), pass the request description in query (e.g., "similar to Matrix").
-- `movie_name` — movie title for search. Use in two cases: 1) for direct movie search (e.g., "find Matrix") - then query should be empty; 2) for finding similar movies (e.g., "similar to Matrix") - then pass the title in movie_name and description in query, the system will find the film by title and then similar ones by vector.
+- `movie_name` — movie title for search. Use ONLY in two cases: 1) for direct movie search (e.g., "find Matrix", "want to watch Interstellar") - then query should be empty; 2) for finding similar movies (e.g., "similar to Matrix") - then pass the title in movie_name and description in query, the system will find the film by title and then similar ones by vector. DO NOT use `movie_name` for requests like "movies [surname]" - these are requests for director's/actor's films, use `directors`/`cast` instead!
 - `genres` — list of English genre names from the list above (translate genres from other languages to English).
 - `atmospheres` — list of English atmosphere names from the list above (translate atmospheres from other languages to English).
-- `cast` — list of actor names in ENGLISH (if the user mentions actors).
-- `directors` — list of director names in ENGLISH (if the user mentions directors).
+- `cast` — list of actor names in ENGLISH. ALWAYS extract actor names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. For example: if the user mentioned "Benedict Cumberbatch" or "Камбербетч" anywhere in the dialogue, add ["Benedict Cumberbatch"].
+- `directors` — list of director names in ENGLISH. ALWAYS extract director names from the ENTIRE dialogue context, translate non-English names to English, and add them to this list. Recognize famous directors by surnames (e.g., "Nolan" = "Christopher Nolan", "Tarantino" = "Quentin Tarantino", "Spielberg" = "Steven Spielberg").
 - `start_year`, `end_year` — if you confidently determined them from responses.
 """
 
@@ -374,12 +376,12 @@ TOOLS_AGENT = [
                     "cast": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Список имен актеров на английском языке (опционально). Если пользователь упоминает актера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
+                        "description": "Список имен актеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена актеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Например: если пользователь упомянул 'Бенедикт Камбербэтч' или 'Камбербетч' в любом месте диалога, добавь ['Benedict Cumberbatch']. Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались актеры!"
                     },
                     "directors": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Список имен режиссеров на английском языке (опционально). Если пользователь упоминает режиссера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
+                        "description": "Список имен режиссеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена режиссеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Распознай известных режиссеров по фамилиям (например: 'Нолан' = 'Christopher Nolan', 'Тарантино' = 'Quentin Tarantino', 'Спилберг' = 'Steven Spielberg'). Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались режиссеры!"
                     }
                 },
                 "required": ["titles", "query"]
@@ -390,7 +392,7 @@ TOOLS_AGENT = [
         "type": "function",
         "function": {
             "name": "search_movies_by_vector",
-            "description": "Выполняет финальный запрос к векторной базе фильмов. Если пользователь прямо называет название фильма для прямого поиска (например: 'фильм Матрица', 'найди Интерстеллар'), передай название в параметр movie_name и оставь query пустым. Если пользователь просит похожие фильмы на определенный (например: 'похожие на Матрицу', 'фильмы как Интерстеллар'), передай название фильма в параметр movie_name и описание запроса в query (например: 'похожие на Матрицу'). Система найдет фильм по названию и затем похожие по вектору.",
+            "description": "Выполняет финальный запрос к векторной базе фильмов. Если пользователь прямо называет название фильма для прямого поиска (например: 'фильм Матрица', 'найди Интерстеллар'), передай название в параметр movie_name и оставь query пустым. Если пользователь просит похожие фильмы на определенный (например: 'похожие на Матрицу', 'фильмы как Интерстеллар'), передай название фильма в параметр movie_name и описание запроса в query (например: 'похожие на Матрицу'). Система найдет фильм по названию и затем похожие по вектору. ⚠️ ВАЖНО: НЕ используй movie_name для запросов типа 'фильмы [фамилия]' (например: 'фильмы нолана', 'фильмы тарантино') - это запросы фильмов режиссера/актера! Используй directors/cast вместо этого.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -400,7 +402,7 @@ TOOLS_AGENT = [
                     },
                     "movie_name": {
                         "type": "string",
-                        "description": "Название фильма для прямого BM25 поиска (используй только когда пользователь прямо называет фильм для прямого поиска, например: 'найди Матрицу', 'хочу посмотреть Интерстеллар'). НЕ используй для запросов типа 'похожие на Матрицу' - для этого используй query. Если указан movie_name, query должен быть пустым."
+                        "description": "Название фильма для прямого BM25 поиска (используй ТОЛЬКО когда пользователь прямо называет фильм для прямого поиска, например: 'найди Матрицу', 'хочу посмотреть Интерстеллар'). НЕ используй для запросов типа 'похожие на Матрицу' - для этого используй query. НЕ используй для запросов типа 'фильмы [фамилия]' (например: 'фильмы нолана', 'фильмы тарантино') - это запросы фильмов режиссера/актера, используй directors/cast вместо этого! Если указан movie_name, query должен быть пустым."
                     },
                     "genres": {"type": "array", "items": {"type": "string"}, "default": []},
                     "atmospheres": {"type": "array", "items": {"type": "string"}, "default": []},
@@ -409,12 +411,12 @@ TOOLS_AGENT = [
                     "cast": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Список имен актеров на английском языке (опционально). Если пользователь упоминает актера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
+                        "description": "Список имен актеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена актеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Например: если пользователь упомянул 'Бенедикт Камбербэтч' или 'Камбербетч' в любом месте диалога, добавь ['Benedict Cumberbatch']. Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались актеры!"
                     },
                     "directors": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Список имен режиссеров на английском языке (опционально). Если пользователь упоминает режиссера, добавь его имя в этот список. Имена должны быть на английском языке, как они хранятся в базе данных."
+                        "description": "Список имен режиссеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена режиссеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Распознай известных режиссеров по фамилиям (например: 'Нолан' = 'Christopher Nolan', 'Тарантино' = 'Quentin Tarantino', 'Спилберг' = 'Steven Spielberg'). Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались режиссеры!"
                     }
                 },
                 "required": []
