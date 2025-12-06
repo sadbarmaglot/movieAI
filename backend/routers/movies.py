@@ -89,6 +89,85 @@ async def get_movie(
 ):
     return await movie_manager.get_by_kp_id(kp_id=movie_id)
 
+@router.get("/get-popular-movies", response_model=List[MovieResponse])
+async def get_popular_movies(
+    request: Request,
+    limit: int = 3,
+    min_year: Optional[int] = None,
+    min_rating_kp: float = 7.0,
+    user_id: Optional[Union[int, str]] = None,
+    platform: str = "telegram",
+    locale: str = "ru",
+    movie_manager: MovieManager = Depends(get_movie_manager)
+):
+    """
+    Получает популярные фильмы из Weaviate: недавно вышедшие с высоким рейтингом.
+    Если указан user_id, исключает фильмы из избранного и пропущенные пользователем.
+    Для английской локализации (locale="en") требуются фильмы с tmdb_id.
+    
+    Args:
+        limit: Количество фильмов для возврата (по умолчанию 3)
+        min_year: Минимальный год выпуска (по умолчанию последний год)
+        min_rating_kp: Минимальный рейтинг Кинопоиска (по умолчанию 7.0)
+        user_id: ID пользователя для исключения его избранных и пропущенных фильмов
+        platform: Платформа ('telegram' or 'ios')
+        locale: Локализация ('ru' or 'en', по умолчанию 'ru')
+    """
+    recommender: MovieWeaviateRecommender = request.app.state.recommender
+    
+    exclude_kp_ids = None
+    if user_id:
+        favorites = await movie_manager.get_favorites(user_id=user_id, platform=platform)
+        skipped = await movie_manager.get_skipped(user_id=user_id, platform=platform)
+        exclude_kp_ids = set(favorites + skipped)
+    
+    movies = await recommender.get_popular_movies(
+        limit=limit,
+        min_year=min_year,
+        min_rating_kp=min_rating_kp,
+        exclude_kp_ids=exclude_kp_ids,
+        locale=locale
+    )
+    
+    result = []
+    for movie in movies:
+        if locale == "en":
+            genres = movie.get("genres_tmdb", [])
+            countries = movie.get("origin_country", [])
+            poster_url = movie.get("tmdb_file_path") or ""
+            background_color = movie.get("tmdb_background_color")
+            title_ru = movie.get("title") or ""
+            title_alt = movie.get("title") or ""
+            overview = movie.get("overview") or ""
+        else:
+            genres = movie.get("genres", [])
+            countries = movie.get("countries", [])
+            poster_url = movie.get("kp_file_path") or ""
+            background_color = movie.get("kp_background_color")
+            title_ru = movie.get("name") or ""
+            title_alt = movie.get("title") or ""
+            overview = movie.get("description") or movie.get("overview") or ""
+        
+        genres_dict = [{"name": g} for g in genres] if genres and isinstance(genres[0], str) else (genres or [])
+        countries_dict = [{"name": c} for c in countries] if countries and isinstance(countries[0], str) else (countries or [])
+        
+        result.append(MovieResponse(
+            movie_id=movie.get("kp_id"),
+            title_alt=title_alt,
+            title_ru=title_ru,
+            overview=overview,
+            poster_url=poster_url,
+            year=movie.get("year"),
+            rating_kp=movie.get("rating_kp"),
+            rating_imdb=movie.get("rating_imdb"),
+            movie_length=movie.get("movieLength"),
+            genres=genres_dict if genres_dict else None,
+            countries=countries_dict if countries_dict else None,
+            background_color=background_color
+        ))
+    
+    return result
+
 @router.get("/preview/{params}", response_class=HTMLResponse)
 async def preview_movie(
         request: Request,

@@ -1,6 +1,8 @@
 import math
 import logging
 import numpy as np
+import random
+from datetime import datetime
 
 from typing import Optional, List, Set, AsyncGenerator
 from openai import AsyncOpenAI
@@ -531,6 +533,101 @@ class MovieWeaviateRecommender:
         except Exception as e:
             logger.warning(f"[get_movie_by_kp_id] Ошибка при получении фильма kp_id={kp_id}: {e}")
             return None
+
+    async def get_popular_movies(
+        self,
+        limit: int = 3,
+        min_year: Optional[int] = None,
+        min_rating_kp: float = 7.0,
+        exclude_kp_ids: Optional[Set[int]] = None,
+        locale: str = DEFAULT_LOCALE
+    ) -> List[dict]:
+        """
+        Получает популярные фильмы из Weaviate: недавно вышедшие с высоким рейтингом.
+        Сортировка: сначала по popularity_score, затем по году, затем по рейтингу КП.
+        
+        Args:
+            limit: Количество фильмов для возврата
+            min_year: Минимальный год выпуска (по умолчанию последний год)
+            min_rating_kp: Минимальный рейтинг Кинопоиска
+            exclude_kp_ids: Множество kp_id для исключения из результатов
+            locale: Локализация ('ru' or 'en')
+        
+        Returns:
+            List[dict]: список фильмов в формате из _weaviate_to_movie_dict, отсортированных по popularity_score
+        """
+        current_year = datetime.now().year
+        
+        if min_year is None:
+            min_year = current_year - 1
+        
+        filters = Filter.by_property("year").greater_or_equal(min_year) & \
+                  Filter.by_property("year").less_or_equal(current_year) & \
+                  Filter.by_property("rating_kp").greater_or_equal(min_rating_kp)
+        
+        filters = filters & Filter.by_property("kp_file_path").exists()
+        
+        if locale == "en":
+            filters = filters & Filter.by_property("tmdb_id").exists()
+        
+        exclude_set = exclude_kp_ids or set()
+        
+        try:
+            fetch_limit = max(limit * 20, 100)
+            
+            results = self.collection.query.fetch_objects(
+                filters=filters,
+                limit=fetch_limit,
+                return_properties=self._return_properties()
+            )
+            
+            movies = []
+            excluded_count = 0
+            
+            for obj in results.objects:
+                props = obj.properties
+                kp_id = props.get("kp_id")
+                
+                if kp_id in exclude_set:
+                    excluded_count += 1
+                    continue
+                
+                movie_dict = self._weaviate_to_movie_dict(props)
+                movies.append(movie_dict)
+            
+            movies.sort(
+                key=lambda x: (
+                    x.get("popularity_score") or 0.0,
+                    x.get("year") or 0,
+                    x.get("rating_kp") or 0.0
+                ),
+                reverse=True
+            )
+            
+            top_count = max(int(len(movies) * 0.3), limit * 3)
+            top_movies = movies[:top_count]
+            
+            if len(top_movies) > limit:
+                selected_movies = random.sample(top_movies, limit)
+            else:
+                selected_movies = top_movies
+            
+            movies = selected_movies
+            
+            logger.debug(
+                f"[WeaviateRecommender] get_popular_movies: найдено {len(movies)} фильмов "
+                f"(locale={locale}, min_year={min_year}, min_rating_kp={min_rating_kp}, limit={limit}, "
+                f"исключено: {excluded_count}, запрошено: {fetch_limit}, "
+                f"топ фильмов: {top_count}, выбрано случайно: {len(selected_movies)}, "
+                f"требование tmdb_id: {'да' if locale == 'en' else 'нет'}, "
+                f"сортировка: popularity_score -> year -> rating_kp -> random)"
+            )
+            
+            return movies
+            
+        except Exception as e:
+            logger.warning(f"[WeaviateRecommender] Ошибка при получении популярных фильмов: {e}")
+            return []
 
     async def find_movies_by_title(
         self,
