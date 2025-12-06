@@ -1,7 +1,6 @@
 import math
 import logging
 import numpy as np
-import random
 from datetime import datetime
 
 from typing import Optional, List, Set, AsyncGenerator
@@ -536,7 +535,7 @@ class MovieWeaviateRecommender:
 
     async def get_popular_movies(
         self,
-        limit: int = 3,
+        limit: int = 100,
         min_year: Optional[int] = None,
         min_rating_kp: float = 7.0,
         exclude_kp_ids: Optional[Set[int]] = None,
@@ -545,6 +544,7 @@ class MovieWeaviateRecommender:
         """
         Получает популярные фильмы из Weaviate: недавно вышедшие с высоким рейтингом.
         Сортировка: сначала по popularity_score, затем по году, затем по рейтингу КП.
+        Возвращает топ фильмы - клиент сам выбирает что показывать.
         
         Args:
             limit: Количество фильмов для возврата
@@ -568,7 +568,7 @@ class MovieWeaviateRecommender:
         exclude_set = exclude_kp_ids or set()
         
         try:
-            fetch_limit = max(limit * 20, 100)
+            fetch_limit = max(limit * 10, 1000)
             
             results = self.collection.query.fetch_objects(
                 filters=filters,
@@ -610,23 +610,14 @@ class MovieWeaviateRecommender:
                 reverse=True
             )
             
-            top_count = max(int(len(movies) * 0.3), limit * 3)
-            top_movies = movies[:top_count]
-            
-            if len(top_movies) > limit:
-                selected_movies = random.sample(top_movies, limit)
-            else:
-                selected_movies = top_movies
-            
-            movies = selected_movies
+            movies = movies[:limit]
             
             logger.debug(
                 f"[WeaviateRecommender] get_popular_movies: найдено {len(movies)} фильмов "
                 f"(locale={locale}, min_year={min_year}, min_rating_kp={min_rating_kp}, limit={limit}, "
                 f"исключено: {excluded_count}, запрошено: {fetch_limit}, "
-                f"топ фильмов: {top_count}, выбрано случайно: {len(selected_movies)}, "
                 f"требование tmdb_id: {'да' if locale == 'en' else 'нет'}, "
-                f"сортировка: popularity_score -> year -> rating_kp -> random)"
+                f"сортировка: popularity_score -> year -> rating_kp)"
             )
             
             return movies

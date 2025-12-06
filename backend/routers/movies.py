@@ -92,7 +92,7 @@ async def get_movie(
 @router.get("/get-popular-movies", response_model=List[MovieResponse])
 async def get_popular_movies(
     request: Request,
-    limit: int = 3,
+    limit: int = 100,
     min_year: Optional[int] = None,
     min_rating_kp: float = 7.0,
     user_id: Optional[Union[int, str]] = None,
@@ -104,9 +104,10 @@ async def get_popular_movies(
     Получает популярные фильмы из Weaviate: недавно вышедшие с высоким рейтингом.
     Если указан user_id, исключает фильмы из избранного и пропущенные пользователем.
     Для английской локализации (locale="en") требуются фильмы с tmdb_id.
+    Возвращает топ фильмы отсортированные по popularity_score - клиент сам выбирает что показывать.
     
     Args:
-        limit: Количество фильмов для возврата (по умолчанию 3)
+        limit: Количество фильмов для возврата (по умолчанию 100)
         min_year: Минимальный год выпуска (по умолчанию последний год)
         min_rating_kp: Минимальный рейтинг Кинопоиска (по умолчанию 7.0)
         user_id: ID пользователя для исключения его избранных и пропущенных фильмов
