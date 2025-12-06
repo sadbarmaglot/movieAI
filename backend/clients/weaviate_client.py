@@ -565,11 +565,6 @@ class MovieWeaviateRecommender:
                   Filter.by_property("year").less_or_equal(current_year) & \
                   Filter.by_property("rating_kp").greater_or_equal(min_rating_kp)
         
-        filters = filters & Filter.by_property("kp_file_path").exists()
-        
-        if locale == "en":
-            filters = filters & Filter.by_property("tmdb_id").exists()
-        
         exclude_set = exclude_kp_ids or set()
         
         try:
@@ -591,6 +586,17 @@ class MovieWeaviateRecommender:
                 if kp_id in exclude_set:
                     excluded_count += 1
                     continue
+                
+                # Фильтруем фильмы без постера
+                kp_file_path = props.get("kp_file_path")
+                if not kp_file_path or kp_file_path == "":
+                    continue
+                
+                # Для английской локализации требуем наличие tmdb_id
+                if locale == "en":
+                    tmdb_id = props.get("tmdb_id")
+                    if not tmdb_id:
+                        continue
                 
                 movie_dict = self._weaviate_to_movie_dict(props)
                 movies.append(movie_dict)
