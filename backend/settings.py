@@ -64,7 +64,8 @@ EXCLUDED_AUTH_PATHS = {
     "/add-favorites",
     "/delete-favorites",
     "/watch-favorites",
-    "/add-skipped"
+    "/add-skipped",
+    "/get-popular-movies"
 }
 
 # middlewares.db_session_middleware
