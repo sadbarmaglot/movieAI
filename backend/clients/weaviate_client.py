@@ -677,18 +677,41 @@ class MovieWeaviateRecommender:
                 )
                 return []
             
-            # BM25 нашел релевантные результаты - возвращаем их
+            title_normalized = " ".join(title.lower().split())
+            
             movies = []
+            exact_matches = []
+            
             for obj in results.objects:
+                movie_title = obj.properties.get(property_name, "")
+                movie_title_normalized = " ".join(movie_title.lower().split())
                 movie_dict = self._weaviate_to_movie_dict(obj.properties)
-                movies.append(movie_dict)
+                score = obj.metadata.score
+                
+                if movie_title_normalized == title_normalized:
+                    exact_matches.append((movie_dict, score))
+                else:
+                    movies.append((movie_dict, score))
+            
+            if exact_matches:
+                exact_matches.sort(key=lambda x: x[1], reverse=True)
+                result_movies = [m[0] for m in exact_matches]
+                
+                logger.info(
+                    f"[find_movies_by_title] Найдено {len(exact_matches)} точных совпадений для '{title}', "
+                    f"лучший score: {exact_matches[0][1]:.3f}"
+                )
+                
+                return result_movies
+            
+            result_movies = [m[0] for m in movies]
             
             logger.info(
-                f"[find_movies_by_title] Найдено {len(movies)} фильмов для '{title}', "
-                f"лучший score: {first_score:.3f}"
+                f"[find_movies_by_title] Найдено {len(result_movies)} фильмов для '{title}', "
+                f"лучший score: {first_score:.3f} (точных совпадений нет)"
             )
             
-            return movies
+            return result_movies
             
         except Exception as e:
             logger.warning(f"[find_movies_by_title] Ошибка при поиске фильма '{title}': {e}")
