@@ -27,6 +27,7 @@ from clients.movie_agent import MovieAgent
 from db_managers import MovieManager
 from models import (
     MovieResponse,
+    MovieResponseLocalized,
     MovieStreamingRequest,
     QuestionStreamingRequest,
     AddSkippedRequest
@@ -89,7 +90,7 @@ async def get_movie(
 ):
     return await movie_manager.get_by_kp_id(kp_id=movie_id)
 
-@router.get("/get-popular-movies", response_model=List[MovieResponse])
+@router.get("/get-popular-movies", response_model=List[MovieResponseLocalized])
 async def get_popular_movies(
     request: Request,
     limit: int = 100,
@@ -103,7 +104,7 @@ async def get_popular_movies(
     """
     Получает популярные фильмы из Weaviate: недавно вышедшие с высоким рейтингом.
     Если указан user_id, исключает фильмы из избранного и пропущенные пользователем.
-    Для английской локализации (locale="en") требуются фильмы с tmdb_id.
+    Возвращает данные для всех локализаций (RU и EN) в формате MovieResponseLocalized.
     Возвращает топ фильмы отсортированные по popularity_score - клиент сам выбирает что показывать.
     
     Args:
@@ -132,39 +133,42 @@ async def get_popular_movies(
     
     result = []
     for movie in movies:
-        if locale == "en":
-            genres = movie.get("genres_tmdb", [])
-            countries = movie.get("origin_country", [])
-            poster_url = movie.get("tmdb_file_path") or ""
-            background_color = movie.get("tmdb_background_color")
-            title_ru = movie.get("title") or ""
-            title_alt = movie.get("title") or ""
-            overview = movie.get("overview") or ""
-        else:
-            genres = movie.get("genres", [])
-            countries = movie.get("countries", [])
-            poster_url = movie.get("kp_file_path") or ""
-            background_color = movie.get("kp_background_color")
-            title_ru = movie.get("name") or ""
-            title_alt = movie.get("title") or ""
-            overview = movie.get("description") or movie.get("overview") or ""
         
-        genres_dict = [{"name": g} for g in genres] if genres and isinstance(genres[0], str) else (genres or [])
-        countries_dict = [{"name": c} for c in countries] if countries and isinstance(countries[0], str) else (countries or [])
         
-        result.append(MovieResponse(
+        genres_ru = movie.get("genres", [])
+        genres_ru_dict = [{"name": g} for g in genres_ru] if genres_ru and isinstance(genres_ru[0], str) else (genres_ru or [])
+        
+        countries_ru = movie.get("countries", [])
+        countries_ru_dict = [{"name": c} for c in countries_ru] if countries_ru and isinstance(countries_ru[0], str) else (countries_ru or [])
+        
+        genres_en = movie.get("genres_tmdb", [])
+        genres_en_dict = [{"name": g} for g in genres_en] if genres_en and isinstance(genres_en[0], str) else (genres_en or [])
+        
+        countries_en = movie.get("origin_country", [])
+        countries_en_dict = [{"name": c} for c in countries_en] if countries_en and isinstance(countries_en[0], str) else (countries_en or [])
+        
+        result.append(MovieResponseLocalized(
             movie_id=movie.get("kp_id"),
-            title_alt=title_alt,
-            title_ru=title_ru,
-            overview=overview,
-            poster_url=poster_url,
+            imdb_id=movie.get("imdb_id"),
+            # Русская локализация
+            name=movie.get("name") or "",
+            overview_ru=movie.get("description") or "",
+            genres_ru=genres_ru_dict if genres_ru_dict else None,
+            countries_ru=countries_ru_dict if countries_ru_dict else None,
+            poster_url_kp=movie.get("kp_file_path") or "",
+            background_color_kp=movie.get("kp_background_color"),
+            # Английская локализация
+            title=movie.get("title") or movie.get("name") or "",
+            overview_en=movie.get("overview") or "",
+            genres_en=genres_en_dict if genres_en_dict else None,
+            countries_en=countries_en_dict if countries_en_dict else None,
+            poster_url_tmdb=movie.get("tmdb_file_path") or "",
+            background_color_tmdb=movie.get("tmdb_background_color"),
+            # Общие поля
             year=movie.get("year"),
             rating_kp=movie.get("rating_kp"),
             rating_imdb=movie.get("rating_imdb"),
-            movie_length=movie.get("movieLength"),
-            genres=genres_dict if genres_dict else None,
-            countries=countries_dict if countries_dict else None,
-            background_color=background_color
+            movie_length=movie.get("movieLength")
         ))
     
     return result
