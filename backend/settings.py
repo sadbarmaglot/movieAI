@@ -4,6 +4,7 @@ import hashlib
 
 # bot_app
 BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_FEEDBACK_TOKEN = os.environ["BOT_FEEDBACK_TOKEN"]
 
 # bot_controller
 WEB_APP_URL = os.environ["WEB_APP_URL"]
@@ -65,7 +66,8 @@ EXCLUDED_AUTH_PATHS = {
     "/delete-favorites",
     "/watch-favorites",
     "/add-skipped",
-    "/get-popular-movies"
+    "/get-popular-movies",
+    "/feedback"
 }
 
 # middlewares.db_session_middleware

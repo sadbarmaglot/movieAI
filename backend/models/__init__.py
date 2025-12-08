@@ -1,4 +1,4 @@
-from .users import UserInitRequest, UserInitResponse, ReferralRequestModel, PaymentRequest, LogEventRequest
+from .users import UserInitRequest, UserInitResponse, ReferralRequestModel, PaymentRequest, LogEventRequest, FeedbackRequest
 from .movies import (
     ChatQA,
     QuestionStreamingRequest,
@@ -13,7 +13,7 @@ from .movies import (
 from .favorites import AddFavoriteRequest, GetFavoriteResponse, DeleteFavoriteRequest, WatchFavoriteRequest
 
 __all__ = [
-    "UserInitRequest", "UserInitResponse", "ReferralRequestModel", "PaymentRequest", "LogEventRequest",
+    "UserInitRequest", "UserInitResponse", "ReferralRequestModel", "PaymentRequest", "LogEventRequest", "FeedbackRequest",
     "ChatQA", "QuestionStreamingRequest", "MovieStreamingRequest", "MovieDetails", "MovieResponse",
     "MovieResponseLocalized", "MovieDetailsIOS",
     "AddFavoriteRequest", "GetFavoriteResponse", "DeleteFavoriteRequest", "WatchFavoriteRequest", "AddSkippedRequest",
