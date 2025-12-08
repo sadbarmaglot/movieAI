@@ -44,3 +44,4 @@ class IOSUserInitResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     message: str
     contact: Optional[str] = None  # Контакт для обратной связи (email, username, telegram и т.д.)
+    device_id: Optional[str] = None  # ID устройства пользователя

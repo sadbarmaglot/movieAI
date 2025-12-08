@@ -86,6 +86,9 @@ async def send_feedback(body: FeedbackRequest):
         feedback_text = "🗣 Обратная связь от пользователя:\n\n"
         feedback_text += f"{body.message}\n\n"
         
+        if body.device_id:
+            feedback_text += f"📱 Device ID: {body.device_id}\n"
+        
         if body.contact:
             feedback_text += f"📧 Контакт для связи: {body.contact}"
         
