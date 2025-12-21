@@ -342,8 +342,8 @@ class MovieWeaviateRecommender:
             
             return movies_by_title
         
-        filters = Filter.by_property("year").greater_than(start_year) & \
-                  Filter.by_property("year").less_than(end_year) & \
+        filters = Filter.by_property("year").greater_or_equal(start_year) & \
+                  Filter.by_property("year").less_or_equal(end_year) & \
                   Filter.by_property("rating_kp").greater_than(rating_kp) & \
                   Filter.by_property("rating_imdb").greater_than(rating_imdb)
 
