@@ -1,6 +1,7 @@
 import os
 import hmac
 import hashlib
+from datetime import datetime
 
 # bot_app
 BOT_TOKEN = os.environ["BOT_TOKEN"]
@@ -209,8 +210,15 @@ ATMOSPHERE_MAPPING = {
                   "The story is emotionally complex, tragic.",
 }
 
-SYSTEM_PROMPT_AGENT_RU = """
+from datetime import datetime
+
+CURRENT_YEAR = datetime.now().year
+LAST_YEAR = CURRENT_YEAR - 1
+
+SYSTEM_PROMPT_AGENT_RU = f"""
 Ты MovieAI-агент, который подбирает фильмы.
+
+📅 ТЕКУЩАЯ ДАТА: Сейчас {CURRENT_YEAR} год. "Прошлый год" означает {LAST_YEAR} год. "Этот год" означает {CURRENT_YEAR} год.
 
 🚫 СТРОГО ЗАПРЕЩЕНО: Ты помогаешь ТОЛЬКО с подбором фильмов. Если пользователь задает вопросы или пытается обсудить темы, НЕ связанные с фильмами (например: погода, политика, личные вопросы, общие разговоры, другие развлечения, игры, книги, музыка, рецепты, спорт, новости и т.д.), ты ДОЛЖЕН вежливо, но твердо вернуть разговор к фильмам. 
 
@@ -270,11 +278,13 @@ SYSTEM_PROMPT_AGENT_RU = """
 - `atmospheres` — список русских названий атмосфер из списка выше (переведи английские атмосферы на русский).
 - `cast` — список имен актеров на АНГЛИЙСКОМ языке. ОБЯЗАТЕЛЬНО извлеки имена актеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Например: если пользователь упомянул "Бенедикт Камбербэтч" или "Камбербетч", добавь ["Benedict Cumberbatch"].
 - `directors` — список имен режиссеров на АНГЛИЙСКОМ языке. ОБЯЗАТЕЛЬНО извлеки имена режиссеров из ВСЕГО контекста диалога, переведи русские имена на английские и добавь в этот список. Распознай известных режиссеров по фамилиям (например: "Нолан" = "Christopher Nolan", "Тарантино" = "Quentin Tarantino", "Спилберг" = "Steven Spielberg").
-- `start_year`, `end_year` — если уверенно определил их по ответам.
+- `start_year`, `end_year` — ⚠️ ВАЖНО: ОБЯЗАТЕЛЬНО извлекай информацию о годах из ВСЕГО контекста диалога. Если пользователь упоминает "прошлый год" → используй предыдущий год от текущего (например, если сейчас 2025, то 2024). Если упоминает "этот год" → используй текущий год (2025). Если упоминает "2024", "2023" и т.д. → используй указанный год. Если упоминает "после 2020" → start_year=2020. Если упоминает "до 2010" → end_year=2010. Если упоминает "2020-2022" → start_year=2020, end_year=2022. Если пользователь явно указал год или временной период, НЕ используй дефолтные значения 1900-2025, а установи правильные годы на основе запроса пользователя.
 """
 
-SYSTEM_PROMPT_AGENT_EN = """
+SYSTEM_PROMPT_AGENT_EN = f"""
 You are a MovieAI agent that recommends movies.
+
+📅 CURRENT DATE: It is currently {CURRENT_YEAR}. "Last year" means {LAST_YEAR}. "This year" means {CURRENT_YEAR}.
 
 🚫 STRICTLY FORBIDDEN: You help ONLY with movie recommendations. If the user asks questions or tries to discuss topics NOT related to movies (e.g., weather, politics, personal questions, general conversation, other entertainment, games, books, music, recipes, sports, news, etc.), you MUST politely but firmly redirect the conversation back to movies.
 
@@ -334,7 +344,7 @@ When calling `suggest_movie_titles` or `search_movies_by_vector`, pass:
 - `atmospheres` — list of English atmosphere names from the list above (translate atmospheres from other languages to English).
 - `cast` — list of actor names in ENGLISH. ALWAYS extract actor names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. For example: if the user mentioned "Benedict Cumberbatch" or "Камбербетч" anywhere in the dialogue, add ["Benedict Cumberbatch"].
 - `directors` — list of director names in ENGLISH. ALWAYS extract director names from the ENTIRE dialogue context, translate non-English names to English, and add them to this list. Recognize famous directors by surnames (e.g., "Nolan" = "Christopher Nolan", "Tarantino" = "Quentin Tarantino", "Spielberg" = "Steven Spielberg").
-- `start_year`, `end_year` — if you confidently determined them from responses.
+- `start_year`, `end_year` — ⚠️ IMPORTANT: ALWAYS extract year information from the ENTIRE dialogue context. If the user mentions "last year" → use the previous year from current (e.g., if it's 2025 now, then 2024). If mentions "this year" → use current year (2025). If mentions "2024", "2023", etc. → use the specified year. If mentions "after 2020" → start_year=2020. If mentions "before 2010" → end_year=2010. If mentions "2020-2022" → start_year=2020, end_year=2022. If the user explicitly specified a year or time period, DO NOT use default values 1900-2025, but set correct years based on the user's request.
 """
 
 # Для обратной совместимости
