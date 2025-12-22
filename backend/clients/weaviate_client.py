@@ -387,18 +387,7 @@ class MovieWeaviateRecommender:
             + (f" & directors filter" if directors else "")
         )
 
-        # Основной семантический поиск
-        results = await self._search_movies(
-            query=query,
-            alpha=0.95,
-            fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
-            result_limit=50,
-            filters=filters,
-            genres=genres,
-            exclude_kp_ids=exclude_kp_ids
-        )
-        
-        # Если есть suggested_titles, находим фильмы по названиям с фильтром по жанру
+        # Если есть suggested_titles, используем ТОЛЬКО их для поиска, основной запрос не используем
         if suggested_titles and len(suggested_titles) > 0:
             logger.info(
                 f"[WeaviateRecommender] Обработка suggested_titles: {suggested_titles}"
@@ -424,7 +413,7 @@ class MovieWeaviateRecommender:
                 movies = await self.find_movies_by_title(
                     title, 
                     locale=locale, 
-                    min_score=0.5,
+                    min_score=5.5,  # Повышенный порог для более точных совпадений
                     filters=genre_filter_for_search
                 )
                 if movies and len(movies) > 0:
@@ -456,6 +445,7 @@ class MovieWeaviateRecommender:
                     
                     if avg_vector:
                         # Находим ближайшие фильмы к среднему вектору
+                        # Используем ТОЛЬКО результаты из suggested_titles, основной поиск не используем
                         similar_movies = await self.find_similar_by_vector(
                             vector=avg_vector,
                             limit=50,
@@ -463,37 +453,88 @@ class MovieWeaviateRecommender:
                             filters=filters
                         )
                         
-                        result_kp_ids_set = {m.get("kp_id") for m in results}
-                        added_count = 0
+                        # Используем только результаты из suggested_titles, не объединяем с основным поиском
+                        results = []
+                        result_kp_ids_set = set()
                         
+                        # Добавляем найденные фильмы из suggested_titles
+                        for movie in found_movies:
+                            kp_id = movie.get("kp_id")
+                            if kp_id and kp_id not in result_kp_ids_set:
+                                results.append(movie)
+                                result_kp_ids_set.add(kp_id)
+                        
+                        # Добавляем похожие фильмы из векторного поиска
                         for movie in similar_movies:
                             kp_id = movie.get("kp_id")
                             if kp_id and kp_id not in result_kp_ids_set:
                                 results.append(movie)
                                 result_kp_ids_set.add(kp_id)
-                                added_count += 1
                         
-                        # Сортируем объединенные результаты по popularity_score
+                        # Сортируем результаты по popularity_score
                         results = sorted(results, key=lambda x: x.get("popularity_score") or 0.0, reverse=True)
                         
                         logger.info(
-                            f"[WeaviateRecommender] Добавлено {added_count} фильмов "
-                            f"из векторного поиска по suggested_titles, "
-                            f"итого результатов: {len(results)} (50 из основного + {added_count} из векторного), "
-                            f"отсортировано по popularity_score"
+                            f"[WeaviateRecommender] Использованы ТОЛЬКО результаты из suggested_titles: "
+                            f"{len(found_movies)} найденных фильмов + {len(similar_movies)} похожих = "
+                            f"{len(results)} итого результатов, отсортировано по popularity_score"
                         )
                     else:
                         logger.warning(
-                            f"[WeaviateRecommender] Не удалось усреднить векторы для suggested_titles"
+                            f"[WeaviateRecommender] Не удалось усреднить векторы для suggested_titles, "
+                            f"переходим к основному поиску по query"
+                        )
+                        # Если не удалось усреднить векторы, используем основной поиск
+                        results = await self._search_movies(
+                            query=query,
+                            alpha=0.95,
+                            fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
+                            result_limit=50,
+                            filters=filters,
+                            genres=genres,
+                            exclude_kp_ids=exclude_kp_ids
                         )
                 else:
                     logger.warning(
-                        f"[WeaviateRecommender] Не удалось получить векторы из Weaviate для найденных фильмов"
+                        f"[WeaviateRecommender] Не удалось получить векторы из Weaviate для найденных фильмов, "
+                        f"переходим к основному поиску по query"
+                    )
+                    # Если не удалось получить векторы, используем основной поиск
+                    results = await self._search_movies(
+                        query=query,
+                        alpha=0.95,
+                        fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
+                        result_limit=50,
+                        filters=filters,
+                        genres=genres,
+                        exclude_kp_ids=exclude_kp_ids
                     )
             else:
                 logger.warning(
-                    f"[WeaviateRecommender] Не найдено фильмов по suggested_titles: {suggested_titles}"
+                    f"[WeaviateRecommender] Не найдено фильмов по suggested_titles: {suggested_titles}, "
+                    f"переходим к основному поиску по query"
                 )
+                # Если не найдено фильмов из suggested_titles, используем основной поиск
+                results = await self._search_movies(
+                    query=query,
+                    alpha=0.95,
+                    fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
+                    result_limit=50,
+                    filters=filters,
+                    genres=genres,
+                    exclude_kp_ids=exclude_kp_ids
+                )
+        else:
+            # Если нет suggested_titles, используем основной семантический поиск
+            results = await self._search_movies(
+                query=query,
+                alpha=0.95,
+                fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
+                result_limit=50,
+                filters=filters,
+                genres=genres,
+                exclude_kp_ids=exclude_kp_ids
+            )
         
         result_kp_ids = [m.get("kp_id") for m in results]
         excluded_in_results = [kp_id for kp_id in result_kp_ids if kp_id in exclude_set]
