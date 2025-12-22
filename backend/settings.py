@@ -263,11 +263,11 @@ SYSTEM_PROMPT_AGENT_RU = f"""
 Атмосферы (используй ТОЛЬКО эти русские названия, переводи английские на русский): про любовь,душевный и трогательный,динамичный и напряженный,жизнеутверждающий,мрачный и атмосферный,сюрреалистичный,психологический,медитативный,депрессивный
 
 
-⚠️ ПРИОРИТЕТ: После сбора информации ПРЕЖДЕ ВСЕГО проверь - можешь ли ты предложить конкретные названия фильмов (минимум 10), которые точно соответствуют запросу?
+⚠️ ПРИОРИТЕТ: После сбора информации ПРЕЖДЕ ВСЕГО проверь - можешь ли ты предложить конкретные названия фильмов (минимум 10), которые ТОЧНО соответствуют запросу?
 
-1. Если ты можешь предложить конкретные названия фильмов (минимум 10), которые точно соответствуют запросу - вызови `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
+1. Если ты можешь предложить конкретные названия фильмов (минимум 10), которые ТОЧНО соответствуют запросу - вызови `suggest_movie_titles` с этими названиями и описанием запроса. ⚠️ КРИТИЧЕСКИ ВАЖНО: Названия должны быть ТОЧНО релевантными запросу пользователя. Например, если пользователь просит "черную комедию", НЕ предлагай мультфильмы, семейные комедии или боевики - только черные комедии. Если пользователь просит "триллер", НЕ предлагай ужасы или боевики без элементов триллера. Названия будут использованы для улучшения поиска, и нерелевантные названия приведут к плохим результатам.
 
-Если можешь предложить конкретные названия (минимум 10) - ВСЕГДА используй `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
+Если можешь предложить конкретные названия (минимум 10), которые ТОЧНО соответствуют запросу - ВСЕГДА используй `suggest_movie_titles` с этими названиями и описанием запроса. Названия будут использованы для улучшения поиска.
 
 Если конкретные названия неизвестны или запрос слишком абстрактный - используй `search_movies_by_vector` с развернутым описанием.
 
@@ -329,11 +329,11 @@ Genres (use ONLY these English names, translate other ones to English): Action,A
 Atmospheres (use ONLY these English names, translate other ones to English): about love,touching and heartfelt,dynamic and intense,uplifting,dark and atmospheric,surreal,psychological,meditative,depressive
 
 
-⚠️ PRIORITY: After gathering information, FIRST check - can you suggest specific movie titles (at least 10) that match the request?
+⚠️ PRIORITY: After gathering information, FIRST check - can you suggest specific movie titles (at least 10) that EXACTLY match the request?
 
-1. If you can suggest specific movie titles (at least 10) that match the request - call `suggest_movie_titles` with these titles and query description. Titles will be used to improve the search.
+1. If you can suggest specific movie titles (at least 10) that EXACTLY match the request - call `suggest_movie_titles` with these titles and query description. ⚠️ CRITICALLY IMPORTANT: Titles must be EXACTLY relevant to the user's request. For example, if the user asks for "black comedy", DO NOT suggest animated films, family comedies, or action movies - only black comedies. If the user asks for "thriller", DO NOT suggest horror or action movies without thriller elements. Titles will be used to improve the search, and irrelevant titles will lead to poor results.
 
-If you can suggest specific titles - ALWAYS use `suggest_movie_titles` with these titles and query description. Titles will be used to improve the search.
+If you can suggest specific titles (at least 10) that EXACTLY match the request - ALWAYS use `suggest_movie_titles` with these titles and query description. Titles will be used to improve the search.
 
 If specific titles are unknown or the request is too abstract - use `search_movies_by_vector` with a detailed description.
 

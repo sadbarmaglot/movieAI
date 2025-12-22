@@ -398,50 +398,54 @@ class MovieWeaviateRecommender:
             exclude_kp_ids=exclude_kp_ids
         )
         
-        # Если есть suggested_titles, находим фильмы по названиям и усредняем их векторы
+        # Если есть suggested_titles, находим фильмы по названиям с фильтром по жанру
         if suggested_titles and len(suggested_titles) > 0:
             logger.info(
                 f"[WeaviateRecommender] Обработка suggested_titles: {suggested_titles}"
             )
             
-            # Находим фильмы по названиям (пробуем и русский, и английский)
+            # Создаем фильтр только по жанру для поиска фильмов из suggested_titles
+            genre_filter_for_search = None
+            if genres is not None and len(genres) > 0:
+                if locale == "en":
+                    genre_filter_for_search = Filter.by_property("genres_tmdb").contains_any(genres)
+                else:
+                    genre_filter_for_search = Filter.by_property("genres").contains_any(genres)
+                logger.info(
+                    f"[WeaviateRecommender] Применяем фильтр по жанрам при поиске suggested_titles: "
+                    f"genres={genres}, locale={locale}"
+                )
+            
+            # Находим фильмы по названиям с фильтром по жанру в указанной локали
             found_movies = []
             found_kp_ids = set()
             
             for title in suggested_titles:
-                movies_ru = await self.find_movies_by_title(title, locale="ru", min_score=0.5)
-                if movies_ru and len(movies_ru) > 0:
-                    movie = movies_ru[0]
+                movies = await self.find_movies_by_title(
+                    title, 
+                    locale=locale, 
+                    min_score=0.5,
+                    filters=genre_filter_for_search
+                )
+                if movies and len(movies) > 0:
+                    movie = movies[0]
                     kp_id = movie.get("kp_id")
                     if kp_id and kp_id not in found_kp_ids:
                         found_movies.append(movie)
                         found_kp_ids.add(kp_id)
                         logger.debug(
-                            f"[WeaviateRecommender] Добавлен фильм для '{title}' (ru): "
-                            f"kp_id={kp_id}, name={movie.get('name', 'N/A')}"
-                        )
-                        continue
-                
-                movies_en = await self.find_movies_by_title(title, locale="en", min_score=0.5)
-                if movies_en and len(movies_en) > 0:
-                    movie = movies_en[0]
-                    kp_id = movie.get("kp_id")
-                    if kp_id and kp_id not in found_kp_ids:
-                        found_movies.append(movie)
-                        found_kp_ids.add(kp_id)
-                        logger.debug(
-                            f"[WeaviateRecommender] Добавлен фильм для '{title}' (en): "
-                            f"kp_id={kp_id}, title={movie.get('title', 'N/A')}"
+                            f"[WeaviateRecommender] Добавлен фильм для '{title}' (locale={locale}): "
+                            f"kp_id={kp_id}, name={movie.get('name', movie.get('title', 'N/A'))}"
                         )
             
             logger.info(
                 f"[WeaviateRecommender] Найдено {len(found_movies)} уникальных фильмов "
-                f"по suggested_titles: {list(found_kp_ids)[:10]}{'...' if len(found_kp_ids) > 10 else ''}"
+                f"по suggested_titles с фильтром по жанру: {list(found_kp_ids)[:10]}{'...' if len(found_kp_ids) > 10 else ''}"
             )
             
             # Если нашли фильмы, получаем их векторы из Weaviate и усредняем
             if found_movies:
-                # Получаем kp_ids найденных фильмов
+                # Получаем kp_ids найденных фильмов (уже отфильтрованных по жанру в Weaviate)
                 found_kp_ids_list = list(found_kp_ids)
                 
                 # Получаем векторы из Weaviate по kp_ids
@@ -630,7 +634,8 @@ class MovieWeaviateRecommender:
         self,
         title: str,
         locale: str = "en",
-        min_score: float = 0.5
+        min_score: float = 0.5,
+        filters: Optional[Filter] = None
     ) -> List[dict]:
         """
         Ищет фильмы по названию используя BM25 поиск (без нормализации).
@@ -640,6 +645,7 @@ class MovieWeaviateRecommender:
             title: Название фильма для поиска
             locale: 'en' для поиска по 'title', 'ru' для поиска по 'name'
             min_score: Минимальный BM25 score для считания результата релевантным
+            filters: Опциональный фильтр Weaviate для дополнительной фильтрации результатов
             
         Returns:
             List[dict]: список найденных фильмов в формате _weaviate_to_movie_dict
@@ -649,16 +655,22 @@ class MovieWeaviateRecommender:
             
             logger.info(
                 f"[find_movies_by_title] Поиск фильма: title='{title}', "
-                f"locale={locale}, property={property_name}, min_score={min_score}"
+                f"locale={locale}, property={property_name}, min_score={min_score}, "
+                f"filters={'применены' if filters else 'не применены'}"
             )
             
-            results = self.collection.query.bm25(
-                query=title,
-                query_properties=[property_name],
-                limit=10,
-                return_metadata=["score"],
-                return_properties=self._return_properties()
-            )
+            query_params = {
+                "query": title,
+                "query_properties": [property_name],
+                "limit": 10,
+                "return_metadata": ["score"],
+                "return_properties": self._return_properties()
+            }
+            
+            if filters:
+                query_params["filters"] = filters
+            
+            results = self.collection.query.bm25(**query_params)
             
             # Критерий 1: Пустой результат
             if len(results.objects) == 0:
