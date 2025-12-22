@@ -445,10 +445,9 @@ class MovieWeaviateRecommender:
                     
                     if avg_vector:
                         # Находим ближайшие фильмы к среднему вектору
-                        # Используем ТОЛЬКО результаты из suggested_titles, основной поиск не используем
                         similar_movies = await self.find_similar_by_vector(
                             vector=avg_vector,
-                            limit=50,
+                            limit=100,
                             exclude_kp_ids=exclude_kp_ids,
                             filters=filters
                         )
@@ -471,8 +470,39 @@ class MovieWeaviateRecommender:
                                 results.append(movie)
                                 result_kp_ids_set.add(kp_id)
                         
-                        # Сортируем результаты по popularity_score
-                        results = sorted(results, key=lambda x: x.get("popularity_score") or 0.0, reverse=True)
+                        distance_weight = 0.7  # 70% релевантность, 30% популярность
+                        
+                        for movie in results:
+                            distance = movie.get("distance")
+                            popularity = movie.get("popularity_score", 0.0)
+                            
+                            if distance is not None:
+                                max_distance = 2.0
+                                normalized_distance = min(distance / max_distance, 1.0)
+                                relevance_score = 1.0 - normalized_distance  # Инвертируем: меньше distance = больше score
+                                
+                                # Нормализуем popularity_score (0-10) до 0-1
+                                normalized_popularity = min(popularity / 10.0, 1.0)
+                                
+                                # Комбинированный score: чем больше, тем лучше
+                                combined_score = (distance_weight * relevance_score) + ((1 - distance_weight) * normalized_popularity)
+                                movie["combined_score"] = combined_score
+                            else:
+                                # Для фильмов из found_movies без distance используем только popularity
+                                normalized_popularity = min(popularity / 10.0, 1.0)
+                                movie["combined_score"] = normalized_popularity
+                        
+                        # Для фильмов из found_movies ставим их в начало (они уже релевантны)
+                        results = sorted(
+                            results,
+                            key=lambda x: (
+                                0 if x.get("kp_id") in found_kp_ids else 1,  # Сначала найденные из suggested_titles
+                                -x.get("combined_score", 0.0)  # Затем по combined_score (убывание)
+                            )
+                        )
+                        
+                        # Берем топ 50
+                        results = results[:50]
                         
                         logger.info(
                             f"[WeaviateRecommender] Использованы ТОЛЬКО результаты из suggested_titles: "
@@ -950,6 +980,8 @@ class MovieWeaviateRecommender:
                     continue
                 
                 movie_dict = self._weaviate_to_movie_dict(props)
+                if hasattr(obj.metadata, 'distance'):
+                    movie_dict["distance"] = obj.metadata.distance
                 movies.append(movie_dict)
                 
                 if len(movies) >= limit:
