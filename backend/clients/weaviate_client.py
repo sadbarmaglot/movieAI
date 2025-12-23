@@ -406,6 +406,7 @@ class MovieWeaviateRecommender:
                 )
             
             # Находим фильмы по названиям с фильтром по жанру в указанной локали
+            # Пробуем оба варианта locale, если первый не дал результатов
             found_movies = []
             found_kp_ids = set()
             
@@ -416,6 +417,21 @@ class MovieWeaviateRecommender:
                     min_score=5.5,  # Повышенный порог для более точных совпадений
                     filters=genre_filter_for_search
                 )
+                
+                # Если не нашли в указанной локали, пробуем альтернативную
+                if not movies or len(movies) == 0:
+                    alternative_locale = "ru" if locale == "en" else "en"
+                    logger.debug(
+                        f"[WeaviateRecommender] Не найдено для '{title}' в locale={locale}, "
+                        f"пробуем locale={alternative_locale}"
+                    )
+                    movies = await self.find_movies_by_title(
+                        title, 
+                        locale=alternative_locale, 
+                        min_score=5.5,
+                        filters=genre_filter_for_search
+                    )
+                
                 if movies and len(movies) > 0:
                     movie = movies[0]
                     kp_id = movie.get("kp_id")
@@ -423,7 +439,7 @@ class MovieWeaviateRecommender:
                         found_movies.append(movie)
                         found_kp_ids.add(kp_id)
                         logger.debug(
-                            f"[WeaviateRecommender] Добавлен фильм для '{title}' (locale={locale}): "
+                            f"[WeaviateRecommender] Добавлен фильм для '{title}': "
                             f"kp_id={kp_id}, name={movie.get('name', movie.get('title', 'N/A'))}"
                         )
             
