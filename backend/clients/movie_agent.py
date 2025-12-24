@@ -25,6 +25,8 @@ from settings import (
     SYSTEM_PROMPT_AGENT_EN,
     MODEL_QA,
     TOOLS_AGENT,
+    TOOLS_AGENT_RU,
+    TOOLS_AGENT_EN,
     RERANK_PROMPT_TEMPLATE_RU,
     RERANK_PROMPT_TEMPLATE_EN,
     DEFAULT_LOCALE
@@ -333,11 +335,13 @@ class MovieAgent:
             f"add_user_message={add_user_message}, locale={locale}"
         )
         
-        # Обновить системный промпт в зависимости от локализации
+        # Обновить системный промпт и инструменты в зависимости от локализации
         if locale == "en":
             self.messages[0] = {"role": "system", "content": SYSTEM_PROMPT_AGENT_EN}
+            self.tools = TOOLS_AGENT_EN
         else:
             self.messages[0] = {"role": "system", "content": SYSTEM_PROMPT_AGENT_RU}
+            self.tools = TOOLS_AGENT_RU
         
         if user_input and add_user_message:
             self.messages.append({"role": "user", "content": user_input})
@@ -429,6 +433,8 @@ class MovieAgent:
                             "end_year": args.get("end_year", 2025),
                             "cast": args.get("cast", []),
                             "directors": args.get("directors", []),
+                            "rating_kp": args.get("rating_kp", 0.0),
+                            "rating_imdb": args.get("rating_imdb", 0.0),
                             "suggested_titles": titles  # Сохраняем для логирования
                         }
                         logger.info(
@@ -449,7 +455,9 @@ class MovieAgent:
                             "start_year": args.get("start_year", 1900),
                             "end_year": args.get("end_year", 2025),
                             "cast": args.get("cast", []),
-                            "directors": args.get("directors", [])
+                            "directors": args.get("directors", []),
+                            "rating_kp": args.get("rating_kp", 0.0),
+                            "rating_imdb": args.get("rating_imdb", 0.0)
                         }
                         logger.info(
                             f"[MovieAgent] QA запросил поиск фильмов: {search_params}"
@@ -496,7 +504,9 @@ class MovieAgent:
             cast: list = None,
             directors: list = None,
             suggested_titles: list = None,
-            movie_name: str = None
+            movie_name: str = None,
+            rating_kp: float = 0.0,
+            rating_imdb: float = 0.0
     ) -> AsyncGenerator[dict, None]:
         """
         Поиск фильмов на основе финального запроса
@@ -530,7 +540,7 @@ class MovieAgent:
                 f"[MovieAgent] run_movie_streaming: user_id={user_id}, platform={platform}, "
                 f"query='{query}', movie_name='{movie_name}', genres={genres}, years={start_year}-{end_year}, "
                 f"cast={cast}, directors={directors}, exclude_kp_ids={len(exclude_set)} фильмов, "
-                f"suggested_titles={suggested_titles}"
+                f"suggested_titles={suggested_titles}, rating_kp={rating_kp}, rating_imdb={rating_imdb}"
             )
 
             movies = await self.recommender.recommend(
@@ -543,7 +553,9 @@ class MovieAgent:
                 exclude_kp_ids=exclude_set,
                 locale=locale,
                 suggested_titles=suggested_titles,
-                movie_name=movie_name
+                movie_name=movie_name,
+                rating_kp=rating_kp,
+                rating_imdb=rating_imdb
             )
 
             logger.info(
