@@ -367,6 +367,14 @@ class MovieAgent:
             message = response.choices[0].message
             tool_calls = getattr(message, "tool_calls", None)
             content = getattr(message, "content", None)
+            
+            # Детальное логирование для отладки
+            logger.debug(
+                f"[MovieAgent] Ответ от OpenAI: tool_calls={tool_calls is not None and len(tool_calls) > 0 if tool_calls else False}, "
+                f"content={'present' if content else 'None'}, "
+                f"content_length={len(content) if content else 0}, "
+                f"message_keys={list(message.model_dump().keys()) if hasattr(message, 'model_dump') else 'N/A'}"
+            )
 
             if tool_calls:
                 tool_calls_dict = [
@@ -488,8 +496,28 @@ class MovieAgent:
                 }
                 return
             else:
-                logger.error("[MovieAgent] QA получил ответ без tool_call и без текста")
-                raise RuntimeError("Ответ без tool_call и без текста")
+                # Детальное логирование для отладки
+                logger.error(
+                    f"[MovieAgent] QA получил ответ без tool_call и без текста. "
+                    f"Response details: message={message}, "
+                    f"message_type={type(message)}, "
+                    f"response_choices_count={len(response.choices)}, "
+                    f"response_finish_reason={response.choices[0].finish_reason if response.choices else 'N/A'}"
+                )
+                # Пробуем добавить сообщение в историю и повторить запрос один раз
+                if len(self.messages) < 20:  # Защита от бесконечного цикла
+                    logger.warning(
+                        f"[MovieAgent] Пробуем повторить запрос. "
+                        f"Текущее количество сообщений: {len(self.messages)}"
+                    )
+                    # Добавляем системное сообщение с просьбой использовать инструменты
+                    self.messages.append({
+                        "role": "system", 
+                        "content": "Пожалуйста, используй один из доступных инструментов (ask_user_question, suggest_movie_titles, search_movies_by_vector). Не отвечай текстом напрямую."
+                    })
+                    continue  # Повторяем цикл
+                else:
+                    raise RuntimeError("Ответ без tool_call и без текста после нескольких попыток")
 
     async def run_movie_streaming(
             self,
