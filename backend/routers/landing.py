@@ -110,8 +110,11 @@ async def get_movies_like(
         # Ограничиваем количество результатов
         similar_movies = similar_movies[:limit]
         
+        # Определяем название фильма для лога
+        movie_title_for_log = source_movie.get("name") or source_movie.get("title") or movie_slug
+        
         logger.info(
-            f"[Landing] Найдено {len(similar_movies)} похожих фильмов для '{movie_name}'"
+            f"[Landing] Найдено {len(similar_movies)} похожих фильмов для '{movie_title_for_log}' (kp_id={source_kp_id})"
         )
         
         return SimilarMoviesResponse(
