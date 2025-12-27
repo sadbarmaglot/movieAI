@@ -275,7 +275,7 @@ class MovieWeaviateRecommender:
             f"genres={genres}, years={start_year}-{end_year}, cast={cast}, directors={directors}, "
             f"exclude_kp_ids={len(exclude_set)} фильмов "
             f"{list(exclude_set)[:20]}{'...' if len(exclude_set) > 20 else ''}, locale={locale}, "
-            f"suggested_titles={suggested_titles}"
+            f"suggested_titles={suggested_titles}, rating_kp={rating_kp}, rating_imdb={rating_imdb}"
         )
         
         if movie_name and query and query.strip():

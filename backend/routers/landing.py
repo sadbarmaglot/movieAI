@@ -24,7 +24,8 @@ async def get_movies_like(
     request: Request,
     movie_slug: str,
     locale: str = "ru",
-    limit: int = 8
+    limit: int = 9,
+    kp_id: Optional[int] = None
 ):
     """
     Получает похожие фильмы для SEO-лендинга.
@@ -33,51 +34,72 @@ async def get_movies_like(
         movie_slug: Slug названия фильма (например, "the-matrix" или "matrica")
         locale: Локализация ('ru' or 'en')
         limit: Количество похожих фильмов (по умолчанию 8, максимум 8)
+        kp_id: Опциональный kp_id фильма. Если указан, используется напрямую без поиска по названию
     
     Returns:
         SimilarMoviesResponse с исходным фильмом и списком похожих
     """
     try:
         # Ограничиваем limit
-        limit = min(limit, 8)
-        
-        # Преобразуем slug в название фильма (заменяем дефисы на пробелы)
-        movie_name = movie_slug.replace("-", " ").strip()
-        
-        logger.info(
-            f"[Landing] Поиск похожих фильмов для: slug='{movie_slug}', "
-            f"movie_name='{movie_name}', locale={locale}, limit={limit}"
-        )
+        limit = min(limit, 9)
         
         recommender: MovieWeaviateRecommender = request.app.state.recommender
+        source_kp_id = None
+        source_movie = None
         
-        # Ищем фильм по названию
-        movies_by_title = await recommender.find_movies_by_title(
-            title=movie_name,
-            locale=locale,
-            min_score=0.5
-        )
-        
-        if not movies_by_title:
-            logger.warning(
-                f"[Landing] Фильм '{movie_name}' не найден (slug: '{movie_slug}')"
+        # Если передан kp_id напрямую - используем его
+        if kp_id:
+            logger.info(
+                f"[Landing] Используем переданный kp_id={kp_id} для slug='{movie_slug}'"
             )
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Фильм '{movie_name}' не найден"
+            source_kp_id = kp_id
+            
+            # Получаем данные фильма по kp_id
+            movie_data = await recommender.get_movie_by_kp_id(kp_id)
+            if not movie_data:
+                logger.warning(
+                    f"[Landing] Фильм с kp_id={kp_id} не найден в базе"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Фильм с ID {kp_id} не найден"
+                )
+            source_movie = movie_data
+        else:
+            # Ищем фильм по названию (старая логика)
+            movie_name = movie_slug.replace("-", " ").strip()
+            
+            logger.info(
+                f"[Landing] Поиск похожих фильмов для: slug='{movie_slug}', "
+                f"movie_name='{movie_name}', locale={locale}, limit={limit}"
             )
-        
-        source_movie = movies_by_title[0]
-        source_kp_id = source_movie.get("kp_id")
-        
-        if not source_kp_id:
-            logger.warning(
-                f"[Landing] Найденный фильм '{movie_name}' не имеет kp_id"
+            
+            movies_by_title = await recommender.find_movies_by_title(
+                title=movie_name,
+                locale=locale,
+                min_score=0.5
             )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Ошибка при получении данных фильма"
-            )
+            
+            if not movies_by_title:
+                logger.warning(
+                    f"[Landing] Фильм '{movie_name}' не найден (slug: '{movie_slug}')"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Фильм '{movie_name}' не найден"
+                )
+            
+            source_movie = movies_by_title[0]
+            source_kp_id = source_movie.get("kp_id")
+            
+            if not source_kp_id:
+                logger.warning(
+                    f"[Landing] Найденный фильм '{movie_name}' не имеет kp_id"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Ошибка при получении данных фильма"
+                )
         
         # Получаем похожие фильмы
         similar_movies = await recommender.recommend_similar(
