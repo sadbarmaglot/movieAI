@@ -13,7 +13,7 @@ from clients.weaviate_client  import MovieWeaviateRecommender, load_vectorstore_
 
 from clients.client_factory import kp_client, openai_client_base_async
 from openapi_config import custom_openapi
-from routers import health, favorites, movies, users
+from routers import health, favorites, movies, users, landing
 from settings import ALLOW_ORIGINS
 
 logging.basicConfig(
@@ -67,5 +67,6 @@ def _include_routers(fastapi_app: FastAPI) -> None:
     fastapi_app.include_router(favorites.router, tags=["Favorites"])
     fastapi_app.include_router(movies.router, tags=["Movies"])
     fastapi_app.include_router(users.router, tags=["User"])
+    fastapi_app.include_router(landing.router, tags=["Landing"])
 
 app = create_app()
