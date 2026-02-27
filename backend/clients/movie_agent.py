@@ -109,10 +109,16 @@ class MovieAgent:
         # Формируем системное сообщение об уточнении
         refinement_text = (
             "Пользователь просмотрел рекомендованные фильмы и хочет уточнить поиск. "
-            "Выслушай его пожелания и скорректируй параметры поиска."
+            "Сохрани все предыдущие критерии (жанры, атмосферу, годы и т.д.) как базу. "
+            "Меняй или добавляй только то, что пользователь явно просит изменить. "
+            "Если пользователь добавляет новый жанр — объедини его с предыдущими, а не заменяй. "
+            "Выполни поиск сразу, без дополнительных вопросов, если запрос пользователя достаточно ясен."
         ) if locale != "en" else (
             "The user has reviewed the recommended movies and wants to refine the search. "
-            "Listen to their feedback and adjust the search parameters."
+            "Keep all previous criteria (genres, atmosphere, years, etc.) as the base. "
+            "Only change or add what the user explicitly asks to modify. "
+            "If the user adds a new genre — combine it with the previous ones, don't replace. "
+            "Perform the search immediately without extra questions if the user's request is clear enough."
         )
 
         if previous_criteria:
