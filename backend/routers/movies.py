@@ -227,7 +227,7 @@ async def _process_agent_results(
             last_tool_call_id_ref["id"] = result["tool_call_id"]
         elif result["type"] == "search":
             await websocket.send_json({"type": "done"})
-            await websocket.close()
+            # Не закрываем WebSocket — позволяем клиенту вернуться для уточнения
             return
 
 
@@ -237,23 +237,39 @@ async def movie_agent_qa_ws(websocket: WebSocket):
 
     # Получить locale из первого сообщения или использовать дефолтный
     locale = "ru"  # По умолчанию русский
-    
+
     agent = MovieAgent(
         openai_client=openai_client_base_async,
         kp_client=kp_client,
         recommender=websocket.app.state.recommender
     )
     last_tool_call_id_ref: dict[str, Optional[str]] = {"id": None}
+    search_completed = False  # Флаг: агент уже выполнил поиск (done отправлен)
 
     try:
         while True:
             data = await websocket.receive_json()
-            
+
             # Обновить locale из данных запроса
             if "locale" in data:
                 locale = data["locale"]
 
+            # Поддержка refine_context при переподключении (WebSocket упал, клиент восстанавливает контекст)
+            if "refine_context" in data and not search_completed:
+                refine_context = data["refine_context"]
+                agent.inject_refinement_context(
+                    previous_criteria=refine_context.get("previous_criteria"),
+                    chat_history=refine_context.get("chat_history"),
+                    locale=locale
+                )
+                search_completed = True  # Считаем что предыдущий поиск был выполнен
+
             if "query" in data:
+                # Если агент уже делал поиск — инжектируем контекст уточнения
+                if search_completed:
+                    agent.inject_refinement_context(locale=locale)
+                    search_completed = False
+
                 last_tool_call_id_ref["id"] = None
                 await _process_agent_results(
                     websocket=websocket,
@@ -263,6 +279,10 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                     last_tool_call_id_ref=last_tool_call_id_ref,
                     locale=locale
                 )
+                # После _process_agent_results: если вернулся после "done", значит поиск завершён
+                # Проверяем — если last_tool_call_id пуст, значит не вопрос, а search/done
+                if last_tool_call_id_ref["id"] is None:
+                    search_completed = True
             elif "answer" in data:
                 if last_tool_call_id_ref["id"]:
                     await agent.answer_tool_call(
@@ -283,6 +303,8 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                     last_tool_call_id_ref=last_tool_call_id_ref,
                     locale=locale
                 )
+                if last_tool_call_id_ref["id"] is None:
+                    search_completed = True
             else:
                 await websocket.send_json(
                     {"error": "Invalid payload: expected 'query' or 'answer'"}

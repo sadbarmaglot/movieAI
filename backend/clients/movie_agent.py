@@ -66,6 +66,67 @@ class MovieAgent:
         ]
         self.last_tool_calls_message: Optional[dict] = None
 
+    def inject_refinement_context(
+        self,
+        previous_criteria: dict = None,
+        chat_history: list = None,
+        locale: str = DEFAULT_LOCALE
+    ):
+        """
+        Инжектирует контекст уточнения в историю сообщений агента.
+
+        Используется в двух сценариях:
+        1. WebSocket жив — агент уже имеет полную историю, добавляем только системное сообщение
+        2. Reconnect — восстанавливаем приблизительную историю из chat_history + criteria
+        """
+        # Если есть chat_history — восстанавливаем историю (reconnect сценарий)
+        if chat_history:
+            # Сбрасываем историю до системного промпта
+            self.messages = [self.messages[0]]
+            for msg in chat_history:
+                role = "user" if msg.get("sender") == "user" else "assistant"
+                text = msg.get("text", "")
+                if text:
+                    self.messages.append({"role": role, "content": text})
+            logger.info(
+                f"[MovieAgent] Восстановлена история из chat_history: "
+                f"{len(chat_history)} сообщений"
+            )
+
+        # Формируем системное сообщение об уточнении
+        refinement_text = (
+            "Пользователь просмотрел рекомендованные фильмы и хочет уточнить поиск. "
+            "Выслушай его пожелания и скорректируй параметры поиска."
+        ) if locale != "en" else (
+            "The user has reviewed the recommended movies and wants to refine the search. "
+            "Listen to their feedback and adjust the search parameters."
+        )
+
+        if previous_criteria:
+            criteria_parts = []
+            if previous_criteria.get("query"):
+                criteria_parts.append(f"query: {previous_criteria['query']}")
+            if previous_criteria.get("genres"):
+                criteria_parts.append(f"genres: {', '.join(previous_criteria['genres'])}")
+            if previous_criteria.get("start_year") and previous_criteria.get("end_year"):
+                criteria_parts.append(f"years: {previous_criteria['start_year']}-{previous_criteria['end_year']}")
+            if previous_criteria.get("cast"):
+                criteria_parts.append(f"cast: {', '.join(previous_criteria['cast'])}")
+            if previous_criteria.get("directors"):
+                criteria_parts.append(f"directors: {', '.join(previous_criteria['directors'])}")
+            if criteria_parts:
+                criteria_summary = "; ".join(criteria_parts)
+                if locale != "en":
+                    refinement_text += f"\nПредыдущие критерии поиска: {criteria_summary}"
+                else:
+                    refinement_text += f"\nPrevious search criteria: {criteria_summary}"
+
+        self.messages.append({"role": "system", "content": refinement_text})
+        logger.info(
+            f"[MovieAgent] Инжектирован контекст уточнения, "
+            f"всего сообщений: {len(self.messages)}"
+        )
+
     @staticmethod
     def _format_movies_for_rerank(movies: List[MovieObject]) -> str:
         return "\n".join(
