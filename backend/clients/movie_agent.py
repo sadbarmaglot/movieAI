@@ -92,6 +92,19 @@ class MovieAgent:
                 f"[MovieAgent] Восстановлена история из chat_history: "
                 f"{len(chat_history)} сообщений"
             )
+        else:
+            # WebSocket жив — у агента полная история, но последнее сообщение может быть
+            # assistant с tool_calls без tool response (run_qa вернулся после yield search).
+            # OpenAI требует tool response для каждого tool_call_id — добавляем.
+            if (self.messages
+                    and self.messages[-1].get("role") == "assistant"
+                    and self.messages[-1].get("tool_calls")):
+                for tc in self.messages[-1]["tool_calls"]:
+                    self.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": "Search completed. Results were shown to the user."
+                    })
 
         # Формируем системное сообщение об уточнении
         refinement_text = (
