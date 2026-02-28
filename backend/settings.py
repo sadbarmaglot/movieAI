@@ -401,12 +401,12 @@ TOOLS_AGENT_RU = [
                     "genres": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Список жанров (опционально)"
+                        "description": "Список ВСЕХ релевантных жанров из списка в системном промпте. Перечисляй ВСЕ жанры — НЕ описывай жанры словами в query, передавай их здесь. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Поле используется как фильтр в базе данных."
                     },
                     "atmospheres": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Список атмосфер (опционально)"
+                        "description": "Список атмосфер из списка в системном промпте."
                     },
                     "start_year": {
                         "type": "integer",
@@ -455,8 +455,18 @@ TOOLS_AGENT_RU = [
                         "type": "string",
                         "description": "Название фильма для прямого BM25 поиска (используй ТОЛЬКО когда пользователь прямо называет фильм для прямого поиска, например: 'найди Матрицу', 'хочу посмотреть Интерстеллар'). НЕ используй для запросов типа 'похожие на Матрицу' - для этого используй query. НЕ используй для запросов типа 'фильмы [фамилия]' (например: 'фильмы нолана', 'фильмы тарантино') - это запросы фильмов режиссера/актера, используй directors/cast вместо этого! ⚠️ КРИТИЧЕСКИ ВАЖНО: НЕ используй для сериалов (например: 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - в базе данных есть ТОЛЬКО фильмы! Используй ТОЛЬКО query для сериалов. Если указан movie_name, query должен быть пустым."
                     },
-                    "genres": {"type": "array", "items": {"type": "string"}, "default": []},
-                    "atmospheres": {"type": "array", "items": {"type": "string"}, "default": []},
+                    "genres": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "default": [],
+                        "description": "Список ВСЕХ релевантных жанров из списка в системном промпте. Перечисляй ВСЕ жанры, которые подходят к запросу — НЕ описывай жанры словами в query, а передавай их здесь. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Поле используется как фильтр в базе данных."
+                    },
+                    "atmospheres": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "default": [],
+                        "description": "Список атмосфер из списка в системном промпте."
+                    },
                     "start_year": {"type": "integer", "default": 1900},
                     "end_year": {"type": "integer", "default": 2025},
                     "cast": {
@@ -527,12 +537,12 @@ TOOLS_AGENT_EN = [
                     "genres": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of genres (optional)"
+                        "description": "List ALL relevant genres from the system prompt list. List ALL genres that match the request — do NOT describe genres in words inside query, pass them here instead. For example: for 'horror comedy' pass ['Horror', 'Comedy']. This field is used as a database filter."
                     },
                     "atmospheres": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of atmospheres (optional)"
+                        "description": "List of atmospheres from the system prompt list."
                     },
                     "start_year": {
                         "type": "integer",
@@ -581,8 +591,18 @@ TOOLS_AGENT_EN = [
                         "type": "string",
                         "description": "Movie title for direct BM25 search (use ONLY when the user explicitly names a movie for direct search, e.g., 'find Matrix', 'want to watch Interstellar'). DO NOT use for requests like 'similar to Matrix' - use query for that. DO NOT use for requests like 'movies [surname]' (e.g., 'movies Nolan', 'movies Tarantino') - these are requests for director's/actor's films, use directors/cast instead! ⚠️ CRITICALLY IMPORTANT: DO NOT use for TV series (e.g., 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - the database contains ONLY movies! Use ONLY query for TV series. If movie_name is specified, query should be empty."
                     },
-                    "genres": {"type": "array", "items": {"type": "string"}, "default": []},
-                    "atmospheres": {"type": "array", "items": {"type": "string"}, "default": []},
+                    "genres": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "default": [],
+                        "description": "List ALL relevant genres from the system prompt list. List ALL genres that match the request — do NOT describe genres in words inside query, pass them here instead. For example: for 'horror comedy' pass ['Horror', 'Comedy']. This field is used as a database filter."
+                    },
+                    "atmospheres": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "default": [],
+                        "description": "List of atmospheres from the system prompt list."
+                    },
                     "start_year": {"type": "integer", "default": 1900},
                     "end_year": {"type": "integer", "default": 2025},
                     "cast": {

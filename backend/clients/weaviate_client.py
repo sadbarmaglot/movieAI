@@ -587,6 +587,40 @@ class MovieWeaviateRecommender:
                 exclude_kp_ids=exclude_kp_ids
             )
         
+        # Fallback: если с contains_all мало результатов — повторяем с первым (главным) жанром
+        MIN_GENRE_FALLBACK = 10
+        if len(results) < MIN_GENRE_FALLBACK and genres and len(genres) > 1:
+            primary_genre = genres[0]
+            logger.info(
+                f"[WeaviateRecommender] Fallback: {len(results)} результатов с contains_all({genres}), "
+                f"повтор с основным жанром: {primary_genre}"
+            )
+            genre_prop = "genres_tmdb" if locale == "en" else "genres"
+            fallback_filters = (
+                Filter.by_property("year").greater_or_equal(start_year) &
+                Filter.by_property("year").less_or_equal(end_year) &
+                Filter.by_property("rating_kp").greater_than(rating_kp) &
+                Filter.by_property("rating_imdb").greater_than(rating_imdb) &
+                Filter.by_property(genre_prop).contains_any([primary_genre])
+            )
+            if cast and len(cast) > 0:
+                fallback_filters = fallback_filters & Filter.by_property("cast").contains_any(cast)
+            if directors and len(directors) > 0:
+                fallback_filters = fallback_filters & Filter.by_property("directors").contains_any(directors)
+
+            results = await self._search_movies(
+                query=query,
+                alpha=0.95,
+                fetch_limit=self.top_k_hybrid if query else self.top_k_fetch,
+                result_limit=50,
+                filters=fallback_filters,
+                genres=genres,
+                exclude_kp_ids=exclude_kp_ids
+            )
+            logger.info(
+                f"[WeaviateRecommender] Fallback с жанром '{primary_genre}' вернул {len(results)} результатов"
+            )
+
         result_kp_ids = [m.get("kp_id") for m in results]
         excluded_in_results = [kp_id for kp_id in result_kp_ids if kp_id in exclude_set]
         if excluded_in_results:
