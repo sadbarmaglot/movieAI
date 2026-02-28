@@ -353,19 +353,23 @@ class MovieWeaviateRecommender:
                 f"locale={locale}"
             )
             if locale == "en":
-                genre_filter = Filter.by_property("genres_tmdb").contains_any(genres)
-                logger.info(
-                    f"[WeaviateRecommender] Применяем фильтр по жанрам для locale=en: "
-                    f"genres={genres}, фильтр: genres_tmdb.contains_any({genres})"
-                )
-                filters = filters & genre_filter
+                genre_prop = "genres_tmdb"
             else:
-                genre_filter = Filter.by_property("genres").contains_any(genres)
-                logger.info(
-                    f"[WeaviateRecommender] Применяем фильтр по жанрам для locale=ru: "
-                    f"genres={genres}, фильтр: genres.contains_any({genres})"
-                )
-                filters = filters & genre_filter
+                genre_prop = "genres"
+
+            if len(genres) > 1:
+                # Несколько жанров — фильм должен содержать ВСЕ (AND)
+                genre_filter = Filter.by_property(genre_prop).contains_all(genres)
+                filter_desc = f"{genre_prop}.contains_all({genres})"
+            else:
+                genre_filter = Filter.by_property(genre_prop).contains_any(genres)
+                filter_desc = f"{genre_prop}.contains_any({genres})"
+
+            logger.info(
+                f"[WeaviateRecommender] Применяем фильтр по жанрам для locale={locale}: "
+                f"genres={genres}, фильтр: {filter_desc}"
+            )
+            filters = filters & genre_filter
         else:
             logger.debug(f"[WeaviateRecommender] Жанры не указаны, фильтр по жанрам не применяется")
 
@@ -396,10 +400,11 @@ class MovieWeaviateRecommender:
             # Создаем фильтр только по жанру для поиска фильмов из suggested_titles
             genre_filter_for_search = None
             if genres is not None and len(genres) > 0:
-                if locale == "en":
-                    genre_filter_for_search = Filter.by_property("genres_tmdb").contains_any(genres)
+                genre_prop = "genres_tmdb" if locale == "en" else "genres"
+                if len(genres) > 1:
+                    genre_filter_for_search = Filter.by_property(genre_prop).contains_all(genres)
                 else:
-                    genre_filter_for_search = Filter.by_property("genres").contains_any(genres)
+                    genre_filter_for_search = Filter.by_property(genre_prop).contains_any(genres)
                 logger.info(
                     f"[WeaviateRecommender] Применяем фильтр по жанрам при поиске suggested_titles: "
                     f"genres={genres}, locale={locale}"
