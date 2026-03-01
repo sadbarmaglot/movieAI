@@ -2,6 +2,15 @@ from pydantic import BaseModel
 from typing import List, Optional, TypedDict, Union
 
 
+def to_name_dicts(items: list) -> list[dict]:
+    """Convert ['a', 'b'] → [{'name': 'a'}, {'name': 'b'}], pass through dicts as-is."""
+    if not items:
+        return []
+    if isinstance(items[0], str):
+        return [{"name": item} for item in items]
+    return items
+
+
 class ChatQA(BaseModel):
     question: Optional[str] = None
     answer: str

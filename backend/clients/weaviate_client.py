@@ -23,6 +23,7 @@ from settings import (
     MODEL_EMBS,
     CLASS_NAME,
     DEFAULT_LOCALE,
+    CURRENT_YEAR,
 )
 
 logger = logging.getLogger(__name__)
@@ -248,7 +249,7 @@ class MovieWeaviateRecommender:
         query: str = None,
         genres: List[str] = None,
         start_year: int = 1900,
-        end_year: int = 2025,
+        end_year: int = CURRENT_YEAR,
         rating_kp: float = 0.0,
         rating_imdb: float = 0.0,
         exclude_kp_ids: Optional[Set[int]] = None,
@@ -1185,7 +1186,7 @@ class MovieWeaviateRecommender:
             movie_name: str = None,
             genres: Optional[List[str]] = None,
             start_year: int = 1900,
-            end_year: int = 2025,
+            end_year: int = CURRENT_YEAR,
             rating_kp: float = 5.0,
             rating_imdb: float = 5.0,
             locale: str = DEFAULT_LOCALE,

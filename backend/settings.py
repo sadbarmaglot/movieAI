@@ -212,8 +212,6 @@ ATMOSPHERE_MAPPING = {
                   "The story is emotionally complex, tragic.",
 }
 
-from datetime import datetime
-
 CURRENT_YEAR = datetime.now().year
 LAST_YEAR = CURRENT_YEAR - 1
 
@@ -285,8 +283,7 @@ GENRES: pass genres the user explicitly mentioned or that clearly follow from th
 YEARS: extract from dialogue. "Last year" → {LAST_YEAR}. Specific dates → start_year/end_year. If not mentioned → don't filter (1900-{CURRENT_YEAR}).
 """
 
-# Для обратной совместимости
-SYSTEM_PROMPT_AGENT = SYSTEM_PROMPT_AGENT_RU
+SYSTEM_PROMPT_AGENT = SYSTEM_PROMPT_AGENT_RU  # default for __init__
 
 # ---------------------------------------------------------------------------
 # Tool descriptions by locale: (tool_name, param_name) → {locale: text}
@@ -419,7 +416,7 @@ _TOOLS_STRUCTURE = [
                     "genres": {"type": "array", "items": {"type": "string"}, "default": []},
                     "atmospheres": {"type": "array", "items": {"type": "string"}, "default": []},
                     "start_year": {"type": "integer", "default": 1900},
-                    "end_year": {"type": "integer", "default": 2025},
+                    "end_year": {"type": "integer", "default": CURRENT_YEAR},
                     "cast": {"type": "array", "items": {"type": "string"}},
                     "directors": {"type": "array", "items": {"type": "string"}},
                     "rating_kp": {"type": "number"},
@@ -449,10 +446,7 @@ def get_agent_tools(locale: str = "ru") -> list:
     return tools
 
 
-# Для обратной совместимости
-TOOLS_AGENT_RU = get_agent_tools("ru")
-TOOLS_AGENT_EN = get_agent_tools("en")
-TOOLS_AGENT = TOOLS_AGENT_RU
+TOOLS_AGENT = get_agent_tools("ru")
 
 RERANK_PROMPT_TEMPLATE_RU = """
 Ты MovieAI-ассистент. Пользователь хочет фильм, соответствующий следующему описанию:

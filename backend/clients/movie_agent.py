@@ -18,8 +18,10 @@ from db_managers import AsyncSessionFactory, MovieManager
 from clients.kp_client import KinopoiskClient
 from clients.weaviate_client import MovieWeaviateRecommender
 from models import MovieObject, MovieResponseLocalized
+from models.movies import to_name_dicts
 from settings import (
     ATMOSPHERE_MAPPING,
+    CURRENT_YEAR,
     SYSTEM_PROMPT_AGENT,
     SYSTEM_PROMPT_AGENT_RU,
     SYSTEM_PROMPT_AGENT_EN,
@@ -55,7 +57,7 @@ class MovieAgent:
                  model: str = MODEL_QA
                  ):
         self.openai_client = openai_client
-        self.kp_client =kp_client
+        self.kp_client = kp_client
         self.recommender = recommender
         self.system_prompt = system_prompt
         self.tools = tools
@@ -277,19 +279,10 @@ class MovieAgent:
                 if not movie.get("tmdb_id"):
                     return None
                 
-            # Преобразуем жанры и страны из списка строк в список словарей для русской локализации
-            genres_ru = movie.get("genres", [])
-            genres_ru_dict = [{"name": g} for g in genres_ru] if genres_ru and isinstance(genres_ru[0], str) else (genres_ru or [])
-            
-            countries_ru = movie.get("countries", [])
-            countries_ru_dict = [{"name": c} for c in countries_ru] if countries_ru and isinstance(countries_ru[0], str) else (countries_ru or [])
-            
-            # Преобразуем жанры и страны из списка строк в список словарей для английской локализации
-            genres_tmdb = movie.get("genres_tmdb", [])
-            genres_en_dict = [{"name": g} for g in genres_tmdb] if genres_tmdb and isinstance(genres_tmdb[0], str) else (genres_tmdb or [])
-            
-            origin_country = movie.get("origin_country", [])
-            countries_en_dict = [{"name": c} for c in origin_country] if origin_country and isinstance(origin_country[0], str) else (origin_country or [])
+            genres_ru_dict = to_name_dicts(movie.get("genres", []))
+            countries_ru_dict = to_name_dicts(movie.get("countries", []))
+            genres_en_dict = to_name_dicts(movie.get("genres_tmdb", []))
+            countries_en_dict = to_name_dicts(movie.get("origin_country", []))
             
             return MovieResponseLocalized(
                 movie_id=kp_id,
@@ -519,7 +512,7 @@ class MovieAgent:
                             "genres": args.get("genres", []),
                             "atmospheres": args.get("atmospheres", []),
                             "start_year": args.get("start_year", 1900),
-                            "end_year": args.get("end_year", 2025),
+                            "end_year": args.get("end_year", CURRENT_YEAR),
                             "cast": args.get("cast", []),
                             "directors": args.get("directors", []),
                             "rating_kp": args.get("rating_kp", 0.0),
@@ -542,7 +535,7 @@ class MovieAgent:
                             "genres": args.get("genres", []),
                             "atmospheres": args.get("atmospheres", []),
                             "start_year": args.get("start_year", 1900),
-                            "end_year": args.get("end_year", 2025),
+                            "end_year": args.get("end_year", CURRENT_YEAR),
                             "cast": args.get("cast", []),
                             "directors": args.get("directors", []),
                             "rating_kp": args.get("rating_kp", 0.0),

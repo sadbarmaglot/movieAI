@@ -32,11 +32,11 @@ from models import (
     QuestionStreamingRequest,
     AddSkippedRequest
 )
-from typing import Union
+from models.movies import to_name_dicts
 from routers.dependencies import get_session, get_movie_manager
 from routers.auth import check_user_stars
 from routers.ws_auth import authenticate_websocket
-from settings import ATMOSPHERE_MAPPING
+from settings import ATMOSPHERE_MAPPING, CURRENT_YEAR
 
 logger = logging.getLogger(__name__)
 
@@ -136,17 +136,10 @@ async def get_popular_movies(
     for movie in movies:
         
         
-        genres_ru = movie.get("genres", [])
-        genres_ru_dict = [{"name": g} for g in genres_ru] if genres_ru and isinstance(genres_ru[0], str) else (genres_ru or [])
-        
-        countries_ru = movie.get("countries", [])
-        countries_ru_dict = [{"name": c} for c in countries_ru] if countries_ru and isinstance(countries_ru[0], str) else (countries_ru or [])
-        
-        genres_en = movie.get("genres_tmdb", [])
-        genres_en_dict = [{"name": g} for g in genres_en] if genres_en and isinstance(genres_en[0], str) else (genres_en or [])
-        
-        countries_en = movie.get("origin_country", [])
-        countries_en_dict = [{"name": c} for c in countries_en] if countries_en and isinstance(countries_en[0], str) else (countries_en or [])
+        genres_ru_dict = to_name_dicts(movie.get("genres", []))
+        countries_ru_dict = to_name_dicts(movie.get("countries", []))
+        genres_en_dict = to_name_dicts(movie.get("genres_tmdb", []))
+        countries_en_dict = to_name_dicts(movie.get("origin_country", []))
         
         result.append(MovieResponseLocalized(
             movie_id=movie.get("kp_id"),
@@ -365,7 +358,7 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
         genres=genres,
         atmospheres=atmospheres,
         start_year=data.get("start_year", 1900),
-        end_year=data.get("end_year", 2025),
+        end_year=data.get("end_year", CURRENT_YEAR),
         cast=cast,
         directors=directors,
         locale=locale,
@@ -405,7 +398,7 @@ async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommende
         movie_name=data.get("movie_name") or None,
         genres=genres,
         start_year=data.get("start_year", 1900),
-        end_year=data.get("end_year", 2025),
+        end_year=data.get("end_year", CURRENT_YEAR),
         rating_kp=data.get("rating_kp", 5.0),
         rating_imdb=data.get("rating_imdb", 5.0),
         locale=locale,
