@@ -246,7 +246,7 @@ SYSTEM_PROMPT_AGENT_RU = f"""
 - Если можешь предложить минимум 10 конкретных релевантных названий → `suggest_movie_titles` (названия на РУССКОМ).
 - Иначе → `search_movies_by_vector` с развернутым описанием.
 
-GENRES: передавай ВСЕ подходящие жанры из списка. Бэкенд использует contains_all (фильм должен содержать все указанные жанры) с автоматическим fallback на основной жанр если результатов мало. Подтип жанра ("черная комедия") → основной жанр в genres + подтип в query.
+GENRES: передавай жанры, которые пользователь явно назвал или которые однозначно следуют из описания. НЕ додумывай жанры при запросе по актёру/режиссёру без указания жанра (например, "фильмы с Киану Ривзом" → genres=[]). Бэкенд использует contains_all с fallback на основной жанр. Подтип жанра ("черная комедия") → основной жанр в genres + подтип в query.
 
 ГОДЫ: извлекай из диалога. "Прошлый год" → {LAST_YEAR}. Конкретные даты → start_year/end_year. Если не указано → не фильтруй (1900-{CURRENT_YEAR}).
 """
@@ -280,7 +280,7 @@ TOOL CHOICE:
 - If you can suggest at least 10 specific relevant titles → `suggest_movie_titles` (titles in ENGLISH).
 - Otherwise → `search_movies_by_vector` with a detailed description.
 
-GENRES: pass ALL matching genres from the list. The backend uses contains_all (movie must have all listed genres) with automatic fallback to the primary genre if too few results. Genre subtype ("black comedy") → main genre in genres + subtype in query.
+GENRES: pass genres the user explicitly mentioned or that clearly follow from their description. Do NOT infer genres for actor/director requests without a genre mentioned (e.g., "movies with Keanu Reeves" → genres=[]). The backend uses contains_all with fallback to primary genre. Genre subtype ("black comedy") → main genre in genres + subtype in query.
 
 YEARS: extract from dialogue. "Last year" → {LAST_YEAR}. Specific dates → start_year/end_year. If not mentioned → don't filter (1900-{CURRENT_YEAR}).
 """
@@ -331,7 +331,7 @@ TOOLS_AGENT_RU = [
                     "genres": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Список ВСЕХ релевантных жанров из списка в системном промпте. Перечисляй ВСЕ жанры — НЕ описывай жанры словами в query, передавай их здесь. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Поле используется как фильтр в базе данных."
+                        "description": "Жанры из списка в системном промпте. Передавай жанры, которые пользователь явно назвал или которые однозначно следуют из описания. НЕ додумывай жанры при запросе по актёру/режиссёру. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Фильтр в базе данных."
                     },
                     "atmospheres": {
                         "type": "array",
@@ -389,7 +389,7 @@ TOOLS_AGENT_RU = [
                         "type": "array",
                         "items": {"type": "string"},
                         "default": [],
-                        "description": "Список ВСЕХ релевантных жанров из списка в системном промпте. Перечисляй ВСЕ жанры, которые подходят к запросу — НЕ описывай жанры словами в query, а передавай их здесь. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Поле используется как фильтр в базе данных."
+                        "description": "Жанры из списка в системном промпте. Передавай жанры, которые пользователь явно назвал или которые однозначно следуют из описания. НЕ додумывай жанры при запросе по актёру/режиссёру. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Фильтр в базе данных."
                     },
                     "atmospheres": {
                         "type": "array",
@@ -467,7 +467,7 @@ TOOLS_AGENT_EN = [
                     "genres": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List ALL relevant genres from the system prompt list. List ALL genres that match the request — do NOT describe genres in words inside query, pass them here instead. For example: for 'horror comedy' pass ['Horror', 'Comedy']. This field is used as a database filter."
+                        "description": "Genres from the system prompt list. Pass genres the user explicitly mentioned or that clearly follow from their description. Do NOT infer genres for actor/director requests. For example: for 'horror comedy' pass ['Horror', 'Comedy']. Used as a database filter."
                     },
                     "atmospheres": {
                         "type": "array",
@@ -525,7 +525,7 @@ TOOLS_AGENT_EN = [
                         "type": "array",
                         "items": {"type": "string"},
                         "default": [],
-                        "description": "List ALL relevant genres from the system prompt list. List ALL genres that match the request — do NOT describe genres in words inside query, pass them here instead. For example: for 'horror comedy' pass ['Horror', 'Comedy']. This field is used as a database filter."
+                        "description": "Genres from the system prompt list. Pass genres the user explicitly mentioned or that clearly follow from their description. Do NOT infer genres for actor/director requests. For example: for 'horror comedy' pass ['Horror', 'Comedy']. Used as a database filter."
                     },
                     "atmospheres": {
                         "type": "array",
