@@ -66,6 +66,19 @@ BOT_PATH_PATTERNS = [
 ]
 
 
+def check_telegram_signature(init_data: str, secret: bytes = TELEGRAM_INIT_DATA_SECRET) -> bool:
+    """Validate Telegram WebApp init_data HMAC signature."""
+    parsed_data = parse_qs(init_data)
+    hash_received = parsed_data.pop("hash", [""])[0].strip()
+    if not hash_received:
+        return False
+    data_check_string = "\n".join(
+        f"{key}={unquote(value[0])}" for key, value in sorted(parsed_data.items())
+    )
+    computed_hash = hmac.new(secret, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return computed_hash == hash_received
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self,
                  app,
@@ -83,17 +96,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self._log_timestamps = defaultdict(float)
         # Интервал между логами для одного IP (в секундах)
         self._log_interval = 60  # 1 минута
-
-    def _check_telegram_signature(self, init_data):
-        parsed_data = parse_qs(init_data)
-        hash_received = parsed_data.pop("hash", [""])[0].strip()
-        if not hash_received:
-            return False
-        data_check_string = "\n".join(
-            f"{key}={unquote(value[0])}" for key, value in sorted(parsed_data.items())
-        )
-        computed_hash = hmac.new(self.init_data_secret, data_check_string.encode(), hashlib.sha256).hexdigest()
-        return computed_hash == hash_received
 
     def _is_bot_request(self, path: str) -> bool:
         """Проверяет, является ли запрос очевидным ботом/сканнером"""
@@ -141,7 +143,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         init_data = request.headers.get(self.init_data_header)
         api_key = request.headers.get(self.api_key_header)
 
-        if (init_data and self._check_telegram_signature(init_data)) or (api_key and api_key == self.api_key):
+        if (init_data and check_telegram_signature(init_data, self.init_data_secret)) or (api_key and api_key == self.api_key):
             return await call_next(request)
         else:
             if self._is_bot_request(request.url.path):

@@ -429,11 +429,14 @@ class MovieAgent:
 
         while True:
             try:
-                response = await self.openai_client.chat.completions.create(
-                    model=self.model,
-                    messages=self.messages,
-                    tools=self.tools,
-                    tool_choice="auto"
+                response = await asyncio.wait_for(
+                    self.openai_client.chat.completions.create(
+                        model=self.model,
+                        messages=self.messages,
+                        tools=self.tools,
+                        tool_choice="auto"
+                    ),
+                    timeout=30
                 )
             except Exception as e:
                 logger.error(

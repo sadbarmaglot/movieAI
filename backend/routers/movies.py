@@ -35,6 +35,7 @@ from models import (
 from typing import Union
 from routers.dependencies import get_session, get_movie_manager
 from routers.auth import check_user_stars
+from routers.ws_auth import authenticate_websocket
 from settings import ATMOSPHERE_MAPPING
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,8 @@ async def _process_agent_results(
 
 @router.websocket("/movie-agent-qa")
 async def movie_agent_qa_ws(websocket: WebSocket):
+    if not await authenticate_websocket(websocket):
+        return
     await websocket.accept()
 
     # Получить locale из первого сообщения или использовать дефолтный
@@ -310,10 +313,11 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                     {"error": "Invalid payload: expected 'query' or 'answer'"}
                 )
     except WebSocketDisconnect:
-        print("QA WebSocket disconnected")
+        logger.info("QA WebSocket disconnected")
     except Exception as e:
+        logger.error(f"QA WebSocket error: {e}", exc_info=True)
         if websocket.application_state == WebSocketState.CONNECTED:
-            await websocket.send_json({"error": str(e)})
+            await websocket.send_json({"error": "Internal server error"})
             await websocket.send_json({"type": "done"})
             await websocket.close()
 
@@ -437,14 +441,16 @@ ACTION_HANDLERS: dict[str, ActionHandler] = {
 
 
 async def send_ws_error(websocket: WebSocket, error: Exception):
-    logger.warning(f"WebSocket error: {error}")
+    logger.error(f"Streaming WebSocket error: {error}", exc_info=True)
     if websocket.application_state == WebSocketState.CONNECTED:
-        await websocket.send_json({"error": str(error)})
+        await websocket.send_json({"error": "Internal server error"})
         await websocket.send_text("__ERROR__")
 
 
 @router.websocket("/movie_streaming-ws")
 async def movie_streaming_ws(websocket: WebSocket):
+    if not await authenticate_websocket(websocket):
+        return
     await websocket.accept()
     agent = MovieAgent(
         openai_client=openai_client_base_async,
