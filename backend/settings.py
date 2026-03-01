@@ -288,26 +288,100 @@ YEARS: extract from dialogue. "Last year" → {LAST_YEAR}. Specific dates → st
 # Для обратной совместимости
 SYSTEM_PROMPT_AGENT = SYSTEM_PROMPT_AGENT_RU
 
-TOOLS_AGENT_RU = [
+# ---------------------------------------------------------------------------
+# Tool descriptions by locale: (tool_name, param_name) → {locale: text}
+# param_name=None → tool-level description
+# ---------------------------------------------------------------------------
+_TOOL_DESC = {
+    # ── ask_user_question ──
+    ("ask_user_question", None): {
+        "ru": "Задаёт уточняющий вопрос пользователю, если его запрос неполный или двусмысленный. Рекомендуется предоставлять 3-5 предложенных вариантов ответов (suggestions) для удобства пользователя.",
+        "en": "Asks a clarifying question to the user if their request is incomplete or ambiguous. It is recommended to provide 3-5 suggested answer options (suggestions) for user convenience.",
+    },
+    ("ask_user_question", "question"): {
+        "ru": "Текст вопроса для пользователя",
+        "en": "Question text for the user",
+    },
+    ("ask_user_question", "suggestions"): {
+        "ru": "Опционально: 3-5 предложенных вариантов быстрых ответов для пользователя. Каждый вариант должен быть коротким (1-5 слов), релевантным вопросу и на том же языке, что и вопрос. Например, для вопроса о жанре: ['Боевик', 'Комедия', 'Драма', 'Триллер']",
+        "en": "Optional: 3-5 suggested quick answer options for the user. Each option should be short (1-5 words), relevant to the question, and in the same language as the question. For example, for a genre question: ['Action', 'Comedy', 'Drama', 'Thriller']",
+    },
+    # ── suggest_movie_titles ──
+    ("suggest_movie_titles", None): {
+        "ru": "Предлагает набор названий фильмов (минимум 10), которые соответствуют запросу пользователя. Используй только известные фильмы, которые точно существуют. Названия должны быть на русском языке (оригинальные названия).",
+        "en": "Suggests a set of movie titles (at least 10) that match the user's request. Use only well-known movies that definitely exist. Titles must be in ENGLISH (as they are stored in the database).",
+    },
+    ("suggest_movie_titles", "titles"): {
+        "ru": "Список названий фильмов на русском языке (оригинальные названия)",
+        "en": "List of movie titles in ENGLISH (as they are stored in the database)",
+    },
+    ("suggest_movie_titles", "query"): {
+        "ru": "Описание запроса пользователя для поиска похожих фильмов",
+        "en": "Description of the user's request for finding similar movies",
+    },
+    # ── search_movies_by_vector ──
+    ("search_movies_by_vector", None): {
+        "ru": "Выполняет финальный запрос к векторной базе фильмов. Если пользователь прямо называет название фильма для прямого поиска (например: 'фильм Матрица', 'найди Интерстеллар'), передай название в параметр movie_name и оставь query пустым. Если пользователь просит похожие фильмы на определенный (например: 'похожие на Матрицу', 'фильмы как Интерстеллар'), передай название фильма в параметр movie_name и описание запроса в query (например: 'похожие на Матрицу'). Система найдет фильм по названию и затем похожие по вектору. ⚠️ ВАЖНО: НЕ используй movie_name для запросов типа 'фильмы [фамилия]' (например: 'фильмы нолана', 'фильмы тарантино') - это запросы фильмов режиссера/актера! Используй directors/cast вместо этого. ⚠️ КРИТИЧЕСКИ ВАЖНО: НЕ используй movie_name для сериалов (например: 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - в базе данных есть ТОЛЬКО фильмы! Используй ТОЛЬКО query с описанием стиля и атмосферы сериала для поиска похожих фильмов.",
+        "en": "Executes a final query to the vector database of movies. If the user explicitly names a movie title for direct search (e.g., 'movie Matrix', 'find Interstellar'), pass the title in the movie_name parameter and leave query empty. If the user asks for similar movies to a specific film (e.g., 'similar to Matrix', 'movies like Interstellar'), pass the movie title in the movie_name parameter and the request description in query (e.g., 'similar to Matrix'). The system will find the film by title and then find similar ones by vector. ⚠️ IMPORTANT: DO NOT use movie_name for requests like 'movies [surname]' (e.g., 'movies Nolan', 'movies Tarantino') - these are requests for director's/actor's films! Use directors/cast instead. ⚠️ CRITICALLY IMPORTANT: DO NOT use movie_name for TV series (e.g., 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - the database contains ONLY movies! Use ONLY query with a description of the series' style and atmosphere to find similar movies.",
+    },
+    ("search_movies_by_vector", "query"): {
+        "ru": "Текстовый запрос для семантического поиска. Используй для поиска похожих фильмов. Если пользователь просит похожие на фильм (например: 'похожие на Матрицу'), включи название фильма в query. Оставь пустым, если указан movie_name для прямого поиска.",
+        "en": "Text query for semantic search. Use for finding similar movies. If the user asks for similar movies to a film (e.g., 'similar to Matrix'), include the movie title in query. Leave empty if movie_name is specified for direct search.",
+    },
+    ("search_movies_by_vector", "movie_name"): {
+        "ru": "Название фильма для прямого BM25 поиска (используй ТОЛЬКО когда пользователь прямо называет фильм для прямого поиска, например: 'найди Матрицу', 'хочу посмотреть Интерстеллар'). НЕ используй для запросов типа 'похожие на Матрицу' - для этого используй query. НЕ используй для запросов типа 'фильмы [фамилия]' (например: 'фильмы нолана', 'фильмы тарантино') - это запросы фильмов режиссера/актера, используй directors/cast вместо этого! ⚠️ КРИТИЧЕСКИ ВАЖНО: НЕ используй для сериалов (например: 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - в базе данных есть ТОЛЬКО фильмы! Используй ТОЛЬКО query для сериалов. Если указан movie_name, query должен быть пустым.",
+        "en": "Movie title for direct BM25 search (use ONLY when the user explicitly names a movie for direct search, e.g., 'find Matrix', 'want to watch Interstellar'). DO NOT use for requests like 'similar to Matrix' - use query for that. DO NOT use for requests like 'movies [surname]' (e.g., 'movies Nolan', 'movies Tarantino') - these are requests for director's/actor's films, use directors/cast instead! ⚠️ CRITICALLY IMPORTANT: DO NOT use for TV series (e.g., 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - the database contains ONLY movies! Use ONLY query for TV series. If movie_name is specified, query should be empty.",
+    },
+    # ── Shared params (same key used by both suggest_movie_titles and search_movies_by_vector) ──
+    ("_shared", "genres"): {
+        "ru": "Жанры из списка в системном промпте. Передавай жанры, которые пользователь явно назвал или которые однозначно следуют из описания. НЕ додумывай жанры при запросе по актёру/режиссёру. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Фильтр в базе данных.",
+        "en": "Genres from the system prompt list. Pass genres the user explicitly mentioned or that clearly follow from their description. Do NOT infer genres for actor/director requests. For example: for 'horror comedy' pass ['Horror', 'Comedy']. Used as a database filter.",
+    },
+    ("_shared", "atmospheres"): {
+        "ru": "Список атмосфер из списка в системном промпте.",
+        "en": "List of atmospheres from the system prompt list.",
+    },
+    ("_shared", "start_year"): {
+        "ru": "Начальный год (опционально)",
+        "en": "Start year (optional)",
+    },
+    ("_shared", "end_year"): {
+        "ru": "Конечный год (опционально)",
+        "en": "End year (optional)",
+    },
+    ("_shared", "cast"): {
+        "ru": "Список имен актеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена актеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Например: если пользователь упомянул 'Бенедикт Камбербэтч' или 'Камбербетч' в любом месте диалога, добавь ['Benedict Cumberbatch']. Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались актеры!",
+        "en": "List of actor names in ENGLISH. ALWAYS extract actor names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. For example: if the user mentioned 'Benedict Cumberbatch' or 'Камбербетч' anywhere in the dialogue, add ['Benedict Cumberbatch']. Names must be in ENGLISH, as they are stored in the database. DO NOT leave empty if actors were mentioned in the dialogue!",
+    },
+    ("_shared", "directors"): {
+        "ru": "Список имен режиссеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена режиссеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Распознай известных режиссеров по фамилиям (например: 'Нолан' = 'Christopher Nolan', 'Тарантино' = 'Quentin Tarantino', 'Спилберг' = 'Steven Spielberg'). Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались режиссеры!",
+        "en": "List of director names in ENGLISH. ALWAYS extract director names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. Recognize famous directors by surnames (e.g., 'Nolan' = 'Christopher Nolan', 'Tarantino' = 'Quentin Tarantino', 'Spielberg' = 'Steven Spielberg'). Names must be in ENGLISH, as they are stored in the database. DO NOT leave empty if directors were mentioned in the dialogue!",
+    },
+    ("_shared", "rating_kp"): {
+        "ru": "Минимальный рейтинг на Кинопоиске (от 0.0 до 10.0). Извлекай из диалога, если пользователь упоминает рейтинг Кинопоиска, 'высокий рейтинг', 'качественное кино' или конкретные числа (например: 'рейтинг выше 7', 'не ниже 8.5'). Если не указано явно, используй 0.0 (без фильтрации).",
+        "en": "Minimum rating on Kinopoisk (from 0.0 to 10.0). Extract from dialogue if the user mentions Kinopoisk rating, 'high rating', 'quality movie' or specific numbers (e.g., 'rating above 7', 'not below 8.5'). If not explicitly specified, use 0.0 (no filtering).",
+    },
+    ("_shared", "rating_imdb"): {
+        "ru": "Минимальный рейтинг на IMDb (от 0.0 до 10.0). Извлекай из диалога, если пользователь упоминает рейтинг IMDb, 'высокий рейтинг', 'качественное кино' или конкретные числа (например: 'IMDB выше 7', 'не ниже 8.5'). Если не указано явно, используй 0.0 (без фильтрации).",
+        "en": "Minimum rating on IMDb (from 0.0 to 10.0). Extract from dialogue if the user mentions IMDb rating, 'high rating', 'quality movie' or specific numbers (e.g., 'IMDB above 7', 'not below 8.5'). If not explicitly specified, use 0.0 (no filtering).",
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Tool structure (defined once, descriptions injected by get_agent_tools)
+# ---------------------------------------------------------------------------
+_TOOLS_STRUCTURE = [
     {
         "type": "function",
         "function": {
             "name": "ask_user_question",
-            "description": "Задаёт уточняющий вопрос пользователю, если его запрос неполный или двусмысленный. Рекомендуется предоставлять 3-5 предложенных вариантов ответов (suggestions) для удобства пользователя.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "Текст вопроса для пользователя"
-                    },
-                    "suggestions": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Опционально: 3-5 предложенных вариантов быстрых ответов для пользователя. Каждый вариант должен быть коротким (1-5 слов), релевантным вопросу и на том же языке, что и вопрос. Например, для вопроса о жанре: ['Боевик', 'Комедия', 'Драма', 'Триллер']"
-                    }
+                    "question": {"type": "string"},
+                    "suggestions": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["question"]
+                "required": ["question"],
             },
         },
     },
@@ -315,57 +389,21 @@ TOOLS_AGENT_RU = [
         "type": "function",
         "function": {
             "name": "suggest_movie_titles",
-            "description": "Предлагает набор названий фильмов (минимум 10), которые соответствуют запросу пользователя. Используй только известные фильмы, которые точно существуют. Названия должны быть на русском языке (оригинальные названия).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "titles": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Список названий фильмов на русском языке (оригинальные названия)"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Описание запроса пользователя для поиска похожих фильмов"
-                    },
-                    "genres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Жанры из списка в системном промпте. Передавай жанры, которые пользователь явно назвал или которые однозначно следуют из описания. НЕ додумывай жанры при запросе по актёру/режиссёру. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Фильтр в базе данных."
-                    },
-                    "atmospheres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Список атмосфер из списка в системном промпте."
-                    },
-                    "start_year": {
-                        "type": "integer",
-                        "description": "Начальный год (опционально)"
-                    },
-                    "end_year": {
-                        "type": "integer",
-                        "description": "Конечный год (опционально)"
-                    },
-                    "cast": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Список имен актеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена актеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Например: если пользователь упомянул 'Бенедикт Камбербэтч' или 'Камбербетч' в любом месте диалога, добавь ['Benedict Cumberbatch']. Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались актеры!"
-                    },
-                    "directors": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Список имен режиссеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена режиссеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Распознай известных режиссеров по фамилиям (например: 'Нолан' = 'Christopher Nolan', 'Тарантино' = 'Quentin Tarantino', 'Спилберг' = 'Steven Spielberg'). Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались режиссеры!"
-                    },
-                    "rating_kp": {
-                        "type": "number",
-                        "description": "Минимальный рейтинг на Кинопоиске (от 0.0 до 10.0). Извлекай из диалога, если пользователь упоминает рейтинг Кинопоиска, 'высокий рейтинг', 'качественное кино' или конкретные числа (например: 'рейтинг выше 7', 'не ниже 8.5'). Если не указано явно, используй 0.0 (без фильтрации)."
-                    },
-                    "rating_imdb": {
-                        "type": "number",
-                        "description": "Минимальный рейтинг на IMDb (от 0.0 до 10.0). Извлекай из диалога, если пользователь упоминает рейтинг IMDb, 'высокий рейтинг', 'качественное кино' или конкретные числа (например: 'IMDB выше 7', 'не ниже 8.5'). Если не указано явно, используй 0.0 (без фильтрации)."
-                    }
+                    "titles": {"type": "array", "items": {"type": "string"}},
+                    "query": {"type": "string"},
+                    "genres": {"type": "array", "items": {"type": "string"}},
+                    "atmospheres": {"type": "array", "items": {"type": "string"}},
+                    "start_year": {"type": "integer"},
+                    "end_year": {"type": "integer"},
+                    "cast": {"type": "array", "items": {"type": "string"}},
+                    "directors": {"type": "array", "items": {"type": "string"}},
+                    "rating_kp": {"type": "number"},
+                    "rating_imdb": {"type": "number"},
                 },
-                "required": ["titles", "query"]
+                "required": ["titles", "query"],
             },
         },
     },
@@ -373,194 +411,47 @@ TOOLS_AGENT_RU = [
         "type": "function",
         "function": {
             "name": "search_movies_by_vector",
-            "description": "Выполняет финальный запрос к векторной базе фильмов. Если пользователь прямо называет название фильма для прямого поиска (например: 'фильм Матрица', 'найди Интерстеллар'), передай название в параметр movie_name и оставь query пустым. Если пользователь просит похожие фильмы на определенный (например: 'похожие на Матрицу', 'фильмы как Интерстеллар'), передай название фильма в параметр movie_name и описание запроса в query (например: 'похожие на Матрицу'). Система найдет фильм по названию и затем похожие по вектору. ⚠️ ВАЖНО: НЕ используй movie_name для запросов типа 'фильмы [фамилия]' (например: 'фильмы нолана', 'фильмы тарантино') - это запросы фильмов режиссера/актера! Используй directors/cast вместо этого. ⚠️ КРИТИЧЕСКИ ВАЖНО: НЕ используй movie_name для сериалов (например: 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - в базе данных есть ТОЛЬКО фильмы! Используй ТОЛЬКО query с описанием стиля и атмосферы сериала для поиска похожих фильмов.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Текстовый запрос для семантического поиска. Используй для поиска похожих фильмов. Если пользователь просит похожие на фильм (например: 'похожие на Матрицу'), включи название фильма в query. Оставь пустым, если указан movie_name для прямого поиска."
-                    },
-                    "movie_name": {
-                        "type": "string",
-                        "description": "Название фильма для прямого BM25 поиска (используй ТОЛЬКО когда пользователь прямо называет фильм для прямого поиска, например: 'найди Матрицу', 'хочу посмотреть Интерстеллар'). НЕ используй для запросов типа 'похожие на Матрицу' - для этого используй query. НЕ используй для запросов типа 'фильмы [фамилия]' (например: 'фильмы нолана', 'фильмы тарантино') - это запросы фильмов режиссера/актера, используй directors/cast вместо этого! ⚠️ КРИТИЧЕСКИ ВАЖНО: НЕ используй для сериалов (например: 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - в базе данных есть ТОЛЬКО фильмы! Используй ТОЛЬКО query для сериалов. Если указан movie_name, query должен быть пустым."
-                    },
-                    "genres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "default": [],
-                        "description": "Жанры из списка в системном промпте. Передавай жанры, которые пользователь явно назвал или которые однозначно следуют из описания. НЕ додумывай жанры при запросе по актёру/режиссёру. Например: для 'хоррор-комедия' передай ['ужасы', 'комедия']. Фильтр в базе данных."
-                    },
-                    "atmospheres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "default": [],
-                        "description": "Список атмосфер из списка в системном промпте."
-                    },
+                    "query": {"type": "string"},
+                    "movie_name": {"type": "string"},
+                    "genres": {"type": "array", "items": {"type": "string"}, "default": []},
+                    "atmospheres": {"type": "array", "items": {"type": "string"}, "default": []},
                     "start_year": {"type": "integer", "default": 1900},
                     "end_year": {"type": "integer", "default": 2025},
-                    "cast": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Список имен актеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена актеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Например: если пользователь упомянул 'Бенедикт Камбербэтч' или 'Камбербетч' в любом месте диалога, добавь ['Benedict Cumberbatch']. Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались актеры!"
-                    },
-                    "directors": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Список имен режиссеров на английском языке. ОБЯЗАТЕЛЬНО извлеки имена режиссеров из ВСЕГО контекста диалога (включая начальный запрос и все ответы пользователя), переведи русские имена на английские и добавь в этот список. Распознай известных режиссеров по фамилиям (например: 'Нолан' = 'Christopher Nolan', 'Тарантино' = 'Quentin Tarantino', 'Спилберг' = 'Steven Spielberg'). Имена должны быть на английском языке, как они хранятся в базе данных. НЕ оставляй пустым, если в диалоге упоминались режиссеры!"
-                    },
-                    "rating_kp": {
-                        "type": "number",
-                        "description": "Минимальный рейтинг на Кинопоиске (от 0.0 до 10.0). Извлекай из диалога, если пользователь упоминает рейтинг Кинопоиска, 'высокий рейтинг', 'качественное кино' или конкретные числа (например: 'рейтинг выше 7', 'не ниже 8.5'). Если не указано явно, используй 0.0 (без фильтрации)."
-                    },
-                    "rating_imdb": {
-                        "type": "number",
-                        "description": "Минимальный рейтинг на IMDb (от 0.0 до 10.0). Извлекай из диалога, если пользователь упоминает рейтинг IMDb, 'высокий рейтинг', 'качественное кино' или конкретные числа (например: 'IMDB выше 7', 'не ниже 8.5'). Если не указано явно, используй 0.0 (без фильтрации)."
-                    }
+                    "cast": {"type": "array", "items": {"type": "string"}},
+                    "directors": {"type": "array", "items": {"type": "string"}},
+                    "rating_kp": {"type": "number"},
+                    "rating_imdb": {"type": "number"},
                 },
-                "required": []
+                "required": [],
             },
         },
-    }
+    },
 ]
 
-TOOLS_AGENT_EN = [
-    {
-        "type": "function",
-        "function": {
-            "name": "ask_user_question",
-            "description": "Asks a clarifying question to the user if their request is incomplete or ambiguous. It is recommended to provide 3-5 suggested answer options (suggestions) for user convenience.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "Question text for the user"
-                    },
-                    "suggestions": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional: 3-5 suggested quick answer options for the user. Each option should be short (1-5 words), relevant to the question, and in the same language as the question. For example, for a genre question: ['Action', 'Comedy', 'Drama', 'Thriller']"
-                    }
-                },
-                "required": ["question"]
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "suggest_movie_titles",
-            "description": "Suggests a set of movie titles (at least 10) that match the user's request. Use only well-known movies that definitely exist. Titles must be in ENGLISH (as they are stored in the database).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "titles": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of movie titles in ENGLISH (as they are stored in the database)"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Description of the user's request for finding similar movies"
-                    },
-                    "genres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Genres from the system prompt list. Pass genres the user explicitly mentioned or that clearly follow from their description. Do NOT infer genres for actor/director requests. For example: for 'horror comedy' pass ['Horror', 'Comedy']. Used as a database filter."
-                    },
-                    "atmospheres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of atmospheres from the system prompt list."
-                    },
-                    "start_year": {
-                        "type": "integer",
-                        "description": "Start year (optional)"
-                    },
-                    "end_year": {
-                        "type": "integer",
-                        "description": "End year (optional)"
-                    },
-                    "cast": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of actor names in ENGLISH. ALWAYS extract actor names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. For example: if the user mentioned 'Benedict Cumberbatch' or 'Камбербетч' anywhere in the dialogue, add ['Benedict Cumberbatch']. Names must be in ENGLISH, as they are stored in the database. DO NOT leave empty if actors were mentioned in the dialogue!"
-                    },
-                    "directors": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of director names in ENGLISH. ALWAYS extract director names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. Recognize famous directors by surnames (e.g., 'Nolan' = 'Christopher Nolan', 'Tarantino' = 'Quentin Tarantino', 'Spielberg' = 'Steven Spielberg'). Names must be in ENGLISH, as they are stored in the database. DO NOT leave empty if directors were mentioned in the dialogue!"
-                    },
-                    "rating_kp": {
-                        "type": "number",
-                        "description": "Minimum rating on Kinopoisk (from 0.0 to 10.0). Extract from dialogue if the user mentions Kinopoisk rating, 'high rating', 'quality movie' or specific numbers (e.g., 'rating above 7', 'not below 8.5'). If not explicitly specified, use 0.0 (no filtering)."
-                    },
-                    "rating_imdb": {
-                        "type": "number",
-                        "description": "Minimum rating on IMDb (from 0.0 to 10.0). Extract from dialogue if the user mentions IMDb rating, 'high rating', 'quality movie' or specific numbers (e.g., 'IMDB above 7', 'not below 8.5'). If not explicitly specified, use 0.0 (no filtering)."
-                    }
-                },
-                "required": ["titles", "query"]
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_movies_by_vector",
-            "description": "Executes a final query to the vector database of movies. If the user explicitly names a movie title for direct search (e.g., 'movie Matrix', 'find Interstellar'), pass the title in the movie_name parameter and leave query empty. If the user asks for similar movies to a specific film (e.g., 'similar to Matrix', 'movies like Interstellar'), pass the movie title in the movie_name parameter and the request description in query (e.g., 'similar to Matrix'). The system will find the film by title and then find similar ones by vector. ⚠️ IMPORTANT: DO NOT use movie_name for requests like 'movies [surname]' (e.g., 'movies Nolan', 'movies Tarantino') - these are requests for director's/actor's films! Use directors/cast instead. ⚠️ CRITICALLY IMPORTANT: DO NOT use movie_name for TV series (e.g., 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - the database contains ONLY movies! Use ONLY query with a description of the series' style and atmosphere to find similar movies.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Text query for semantic search. Use for finding similar movies. If the user asks for similar movies to a film (e.g., 'similar to Matrix'), include the movie title in query. Leave empty if movie_name is specified for direct search."
-                    },
-                    "movie_name": {
-                        "type": "string",
-                        "description": "Movie title for direct BM25 search (use ONLY when the user explicitly names a movie for direct search, e.g., 'find Matrix', 'want to watch Interstellar'). DO NOT use for requests like 'similar to Matrix' - use query for that. DO NOT use for requests like 'movies [surname]' (e.g., 'movies Nolan', 'movies Tarantino') - these are requests for director's/actor's films, use directors/cast instead! ⚠️ CRITICALLY IMPORTANT: DO NOT use for TV series (e.g., 'Breaking Bad', 'Game of Thrones', 'Во все тяжкие') - the database contains ONLY movies! Use ONLY query for TV series. If movie_name is specified, query should be empty."
-                    },
-                    "genres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "default": [],
-                        "description": "Genres from the system prompt list. Pass genres the user explicitly mentioned or that clearly follow from their description. Do NOT infer genres for actor/director requests. For example: for 'horror comedy' pass ['Horror', 'Comedy']. Used as a database filter."
-                    },
-                    "atmospheres": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "default": [],
-                        "description": "List of atmospheres from the system prompt list."
-                    },
-                    "start_year": {"type": "integer", "default": 1900},
-                    "end_year": {"type": "integer", "default": 2025},
-                    "cast": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of actor names in ENGLISH. ALWAYS extract actor names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. For example: if the user mentioned 'Benedict Cumberbatch' or 'Камбербетч' anywhere in the dialogue, add ['Benedict Cumberbatch']. Names must be in ENGLISH, as they are stored in the database. DO NOT leave empty if actors were mentioned in the dialogue!"
-                    },
-                    "directors": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of director names in ENGLISH. ALWAYS extract director names from the ENTIRE dialogue context (including the initial request and all user responses), translate non-English names to English, and add them to this list. Recognize famous directors by surnames (e.g., 'Nolan' = 'Christopher Nolan', 'Tarantino' = 'Quentin Tarantino', 'Spielberg' = 'Steven Spielberg'). Names must be in ENGLISH, as they are stored in the database. DO NOT leave empty if directors were mentioned in the dialogue!"
-                    },
-                    "rating_kp": {
-                        "type": "number",
-                        "description": "Minimum rating on Kinopoisk (from 0.0 to 10.0). Extract from dialogue if the user mentions Kinopoisk rating, 'high rating', 'quality movie' or specific numbers (e.g., 'rating above 7', 'not below 8.5'). If not explicitly specified, use 0.0 (no filtering)."
-                    },
-                    "rating_imdb": {
-                        "type": "number",
-                        "description": "Minimum rating on IMDb (from 0.0 to 10.0). Extract from dialogue if the user mentions IMDb rating, 'high rating', 'quality movie' or specific numbers (e.g., 'IMDB above 7', 'not below 8.5'). If not explicitly specified, use 0.0 (no filtering)."
-                    }
-                },
-                "required": []
-            },
-        },
-    }
-]
+
+def get_agent_tools(locale: str = "ru") -> list:
+    """Build tools list with descriptions for the given locale."""
+    import copy
+    tools = copy.deepcopy(_TOOLS_STRUCTURE)
+    for tool in tools:
+        fn = tool["function"]
+        name = fn["name"]
+        fn["description"] = _TOOL_DESC[(name, None)][locale]
+        for param, schema in fn["parameters"]["properties"].items():
+            key = (name, param)
+            if key not in _TOOL_DESC:
+                key = ("_shared", param)
+            if key in _TOOL_DESC:
+                schema["description"] = _TOOL_DESC[key][locale]
+    return tools
+
 
 # Для обратной совместимости
+TOOLS_AGENT_RU = get_agent_tools("ru")
+TOOLS_AGENT_EN = get_agent_tools("en")
 TOOLS_AGENT = TOOLS_AGENT_RU
 
 RERANK_PROMPT_TEMPLATE_RU = """

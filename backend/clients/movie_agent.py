@@ -25,8 +25,7 @@ from settings import (
     SYSTEM_PROMPT_AGENT_EN,
     MODEL_QA,
     TOOLS_AGENT,
-    TOOLS_AGENT_RU,
-    TOOLS_AGENT_EN,
+    get_agent_tools,
     RERANK_PROMPT_TEMPLATE_RU,
     RERANK_PROMPT_TEMPLATE_EN,
     DEFAULT_LOCALE
@@ -418,10 +417,9 @@ class MovieAgent:
         # Обновить системный промпт и инструменты в зависимости от локализации
         if locale == "en":
             self.messages[0] = {"role": "system", "content": SYSTEM_PROMPT_AGENT_EN}
-            self.tools = TOOLS_AGENT_EN
         else:
             self.messages[0] = {"role": "system", "content": SYSTEM_PROMPT_AGENT_RU}
-            self.tools = TOOLS_AGENT_RU
+        self.tools = get_agent_tools(locale)
         
         if user_input and add_user_message:
             self.messages.append({"role": "user", "content": user_input})
