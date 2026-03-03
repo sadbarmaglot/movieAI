@@ -417,32 +417,26 @@ class MovieWeaviateRecommender:
                 f"[WeaviateRecommender] Обработка suggested_titles: {suggested_titles}"
             )
             
-            # Создаем фильтр только по жанру для поиска фильмов из suggested_titles
-            genre_filter_for_search = None
-            if genres is not None and len(genres) > 0:
+            genre_filter_for_titles = None
+            if genres:
                 genre_prop = "genres_tmdb" if locale == "en" else "genres"
-                if len(genres) > 1:
-                    genre_filter_for_search = Filter.by_property(genre_prop).contains_all(genres)
-                else:
-                    genre_filter_for_search = Filter.by_property(genre_prop).contains_any(genres)
+                genre_filter_for_titles = Filter.by_property(genre_prop).contains_any(genres)
                 logger.info(
-                    f"[WeaviateRecommender] Применяем фильтр по жанрам при поиске suggested_titles: "
-                    f"genres={genres}, locale={locale}"
+                    f"[WeaviateRecommender] Фильтр для suggested_titles: "
+                    f"contains_any({genres}), locale={locale}"
                 )
-            
-            # Находим фильмы по названиям с фильтром по жанру в указанной локали
-            # Пробуем оба варианта locale, если первый не дал результатов
+
             found_movies = []
             found_kp_ids = set()
-            
+
             for title in suggested_titles:
                 movies = await self.find_movies_by_title(
-                    title, 
-                    locale=locale, 
-                    min_score=5.5,  # Повышенный порог для более точных совпадений
-                    filters=genre_filter_for_search
+                    title,
+                    locale=locale,
+                    min_score=5.5,
+                    filters=genre_filter_for_titles,
                 )
-                
+
                 # Если не нашли в указанной локали, пробуем альтернативную
                 if not movies or len(movies) == 0:
                     alternative_locale = "ru" if locale == "en" else "en"
@@ -451,10 +445,10 @@ class MovieWeaviateRecommender:
                         f"пробуем locale={alternative_locale}"
                     )
                     movies = await self.find_movies_by_title(
-                        title, 
-                        locale=alternative_locale, 
+                        title,
+                        locale=alternative_locale,
                         min_score=5.5,
-                        filters=genre_filter_for_search
+                        filters=genre_filter_for_titles,
                     )
                 
                 if movies and len(movies) > 0:
@@ -470,7 +464,7 @@ class MovieWeaviateRecommender:
             
             logger.info(
                 f"[WeaviateRecommender] Найдено {len(found_movies)} уникальных фильмов "
-                f"по suggested_titles с фильтром по жанру: {list(found_kp_ids)[:10]}{'...' if len(found_kp_ids) > 10 else ''}"
+                f"по suggested_titles (contains_any): {list(found_kp_ids)[:10]}{'...' if len(found_kp_ids) > 10 else ''}"
             )
             
             # Если нашли фильмы, получаем их векторы из Weaviate и усредняем
