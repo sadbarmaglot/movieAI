@@ -289,37 +289,56 @@ class MovieWeaviateRecommender:
                 locale=locale,
                 min_score=0.5
             )
-            
+
             if not movies_by_title:
                 logger.warning(
-                    f"[WeaviateRecommender] Фильм '{movie_name}' не найден через BM25 поиск"
+                    f"[WeaviateRecommender] Фильм '{movie_name}' не найден через BM25, "
+                    f"fallback на гибридный поиск с query='{query[:100]}'"
                 )
-                return []
-            
-            source_movie = movies_by_title[0]
-            source_kp_id = source_movie.get("kp_id")
-            
-            if not source_kp_id:
-                logger.warning(
-                    f"[WeaviateRecommender] Найденный фильм '{movie_name}' не имеет kp_id"
-                )
-                return []
-            
-            logger.info(
-                f"[WeaviateRecommender] Найден фильм '{movie_name}' с kp_id={source_kp_id}, "
-                f"ищем похожие фильмы"
-            )
-            
-            similar_movies = await self.recommend_similar(
-                source_kp_id=source_kp_id,
-                exclude_kp_ids=exclude_set
-            )
-            
-            logger.info(
-                f"[WeaviateRecommender] Найдено {len(similar_movies)} похожих фильмов на '{movie_name}'"
-            )
-            
-            return similar_movies
+                # Fallback: используем query как обычный гибридный поиск
+                # (продолжаем выполнение — упадём в Path 3 ниже)
+            else:
+                source_movie = movies_by_title[0]
+                source_kp_id = source_movie.get("kp_id")
+                source_name = source_movie.get("name", "") or source_movie.get("title", "")
+                source_movie_genres = [g.lower() for g in source_movie.get("genres", [])]
+
+                if not source_kp_id:
+                    logger.warning(
+                        f"[WeaviateRecommender] Найденный фильм '{movie_name}' не имеет kp_id, "
+                        f"fallback на гибридный поиск"
+                    )
+                else:
+                    # Валидация: проверяем совпадение жанров BM25-результата с запрошенными
+                    genre_validated = True
+                    if genres:
+                        requested_lower = {g.lower() for g in genres}
+                        found_lower = set(source_movie_genres)
+                        if not found_lower & requested_lower:
+                            genre_validated = False
+                            logger.warning(
+                                f"[WeaviateRecommender] BM25 нашёл '{source_name}' (kp_id={source_kp_id}) "
+                                f"с жанрами {source_movie_genres}, но запрошены {genres}. "
+                                f"Жанры не пересекаются — fallback на гибридный поиск."
+                            )
+
+                    if genre_validated:
+                        logger.info(
+                            f"[WeaviateRecommender] Найден фильм '{source_name}' (kp_id={source_kp_id}), "
+                            f"жанры={source_movie_genres}, ищем похожие"
+                        )
+
+                        similar_movies = await self.recommend_similar(
+                            source_kp_id=source_kp_id,
+                            exclude_kp_ids=exclude_set,
+                        )
+
+                        logger.info(
+                            f"[WeaviateRecommender] Найдено {len(similar_movies)} похожих фильмов "
+                            f"на '{source_name}'"
+                        )
+
+                        return similar_movies
         
         if movie_name and (not query or query.strip() == ""):
             logger.info(
@@ -1124,7 +1143,7 @@ class MovieWeaviateRecommender:
 
                 movie_dict = self._weaviate_to_movie_dict(props)
                 movie_genres = movie_dict.get("genres", [])
-                
+
                 if self._skip_due_to_genre_conflict(movie_genres, source_genres):
                     genre_conflict_count += 1
                     logger.debug(

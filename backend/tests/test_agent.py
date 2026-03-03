@@ -572,3 +572,132 @@ class TestRerankPrompts:
     def test_model_rerank_is_set(self):
         assert MODEL_RERANK
         assert isinstance(MODEL_RERANK, str)
+
+
+# ── Tool description: movie_name for similar search ─────────────────
+
+class TestMovieNameToolDescription:
+    """movie_name tool description should instruct agent to use it for similar-to-X queries."""
+
+    def test_ru_movie_name_allows_similar(self):
+        tools = get_agent_tools("ru")
+        search_tool = tools[2]  # search_movies_by_vector
+        movie_name_desc = search_tool["function"]["parameters"]["properties"]["movie_name"]["description"]
+        # Should NOT contain "НЕ используй для похожие"
+        assert "НЕ используй для запросов типа 'похожие" not in movie_name_desc
+        # Should mention similar/похожие use case
+        assert "похожи" in movie_name_desc.lower()
+
+    def test_en_movie_name_allows_similar(self):
+        tools = get_agent_tools("en")
+        search_tool = tools[2]
+        movie_name_desc = search_tool["function"]["parameters"]["properties"]["movie_name"]["description"]
+        assert "DO NOT use for requests like 'similar" not in movie_name_desc
+        assert "similar" in movie_name_desc.lower()
+
+    def test_ru_movie_name_still_forbids_directors(self):
+        tools = get_agent_tools("ru")
+        movie_name_desc = tools[2]["function"]["parameters"]["properties"]["movie_name"]["description"]
+        assert "directors" in movie_name_desc.lower() or "режиссёр" in movie_name_desc.lower()
+
+    def test_en_movie_name_still_forbids_series(self):
+        tools = get_agent_tools("en")
+        movie_name_desc = tools[2]["function"]["parameters"]["properties"]["movie_name"]["description"]
+        assert "series" in movie_name_desc.lower()
+
+    def test_ru_search_tool_desc_mentions_similar_mode(self):
+        tools = get_agent_tools("ru")
+        desc = tools[2]["function"]["description"]
+        assert "похожи" in desc.lower()
+
+    def test_en_search_tool_desc_mentions_similar_mode(self):
+        tools = get_agent_tools("en")
+        desc = tools[2]["function"]["description"]
+        assert "similar" in desc.lower()
+
+
+# ── System prompt: similar-to rule ──────────────────────────────────
+
+class TestSystemPromptSimilarRule:
+    """System prompts should instruct agent to use movie_name for 'similar to X' queries."""
+
+    def test_ru_prompt_has_similar_rule(self):
+        assert "похожие на" in SYSTEM_PROMPT_AGENT_RU.lower() or "похожих" in SYSTEM_PROMPT_AGENT_RU.lower()
+
+    def test_ru_prompt_has_movie_name_with_query_example(self):
+        assert 'movie_name="Матрица"' in SYSTEM_PROMPT_AGENT_RU or "movie_name" in SYSTEM_PROMPT_AGENT_RU
+
+    def test_en_prompt_has_similar_rule(self):
+        assert "similar to" in SYSTEM_PROMPT_AGENT_EN.lower()
+
+    def test_en_prompt_has_movie_name_with_query_example(self):
+        assert 'movie_name="Matrix"' in SYSTEM_PROMPT_AGENT_EN or "movie_name" in SYSTEM_PROMPT_AGENT_EN
+
+
+# ── Agent tool call with movie_name ─────────────────────────────────
+
+class TestAgentMovieNameParsing:
+    """Test that movie_name is correctly parsed from search_movies_by_vector tool calls."""
+
+    @pytest.fixture
+    def mock_agent(self):
+        agent = MovieAgent(
+            openai_client=AsyncMock(),
+            kp_client=MagicMock(),
+            recommender=MagicMock(),
+        )
+        return agent
+
+    def _make_tool_call(self, name, arguments):
+        tc = MagicMock()
+        tc.function.name = name
+        tc.function.arguments = json.dumps(arguments)
+        tc.id = "call_movie_name_test"
+        return tc
+
+    def _make_response(self, tool_calls):
+        resp = MagicMock()
+        choice = MagicMock()
+        choice.message.tool_calls = tool_calls
+        choice.message.content = None
+        choice.finish_reason = "tool_calls"
+        resp.choices = [choice]
+        return resp
+
+    @pytest.mark.asyncio
+    async def test_search_with_movie_name_and_query(self, mock_agent):
+        """Agent should pass both movie_name and query for similar-to-X requests."""
+        tool_call = self._make_tool_call("search_movies_by_vector", {
+            "movie_name": "Матрица",
+            "query": "научная фантастика, виртуальная реальность, экшен",
+            "genres": ["фантастика", "боевик"],
+        })
+        resp = self._make_response([tool_call])
+        mock_agent.openai_client.chat.completions.create = AsyncMock(return_value=resp)
+
+        results = []
+        async for r in mock_agent.run_qa("похожее на Матрицу", locale="ru"):
+            results.append(r)
+
+        assert len(results) == 1
+        assert results[0]["type"] == "search"
+        assert results[0]["movie_name"] == "Матрица"
+        assert results[0]["query"] == "научная фантастика, виртуальная реальность, экшен"
+        assert results[0]["genres"] == ["фантастика", "боевик"]
+
+    @pytest.mark.asyncio
+    async def test_search_with_movie_name_only(self, mock_agent):
+        """Direct search: movie_name set, no query."""
+        tool_call = self._make_tool_call("search_movies_by_vector", {
+            "movie_name": "Интерстеллар",
+        })
+        resp = self._make_response([tool_call])
+        mock_agent.openai_client.chat.completions.create = AsyncMock(return_value=resp)
+
+        results = []
+        async for r in mock_agent.run_qa("найди Интерстеллар", locale="ru"):
+            results.append(r)
+
+        assert len(results) == 1
+        assert results[0]["movie_name"] == "Интерстеллар"
+        assert results[0]["query"] == ""
