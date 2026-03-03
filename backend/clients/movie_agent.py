@@ -680,8 +680,8 @@ class MovieAgent:
                 f"KP IDs: {[m.get('kp_id') for m in movies[:20]]}{'...' if len(movies) > 20 else ''}"
             )
 
-            # Pre-filter франшизы перед реранком
-            if movie_name:
+            # Pre-filter франшизы перед реранком (только для "похожих на X", не для прямого поиска)
+            if movie_name and query and query.strip():
                 movies = self._pre_filter_franchise(movies, movie_name, locale)
 
             rerank_count = 0
