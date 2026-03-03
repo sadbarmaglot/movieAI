@@ -24,12 +24,17 @@ for k, v in _MOCK_ENV.items():
     os.environ.setdefault(k, v)
 
 from models.movies import to_name_dicts
+from clients.movie_agent import MovieAgent, EnrichedMovieObject
+from models import MovieResponseLocalized
 from settings import (
     get_agent_tools,
     CURRENT_YEAR,
     LAST_YEAR,
+    MODEL_RERANK,
     SYSTEM_PROMPT_AGENT_RU,
     SYSTEM_PROMPT_AGENT_EN,
+    RERANK_PROMPT_TEMPLATE_RU,
+    RERANK_PROMPT_TEMPLATE_EN,
 )
 
 
@@ -289,3 +294,276 @@ class TestAgentToolCallParsing:
         assert results[0]["cast"] == ["Keanu Reeves"]
         # Genres should be empty for actor request
         assert results[0]["genres"] == []
+
+
+# ── Pre-filter franchise ──────────────────────────────────────────────
+
+class TestPreFilterFranchise:
+    def _movie(self, name: str, title: str = "", kp_id: int = 1) -> dict:
+        return {"name": name, "title": title, "kp_id": kp_id, "page_content": ""}
+
+    def test_removes_exact_match(self):
+        movies = [
+            self._movie("Матрица", "The Matrix", 1),
+            self._movie("Начало", "Inception", 2),
+        ]
+        result = MovieAgent._pre_filter_franchise(movies, "Матрица", locale="ru")
+        assert len(result) == 1
+        assert result[0]["kp_id"] == 2
+
+    def test_removes_sequel_with_number(self):
+        movies = [
+            self._movie("Матрица", "The Matrix", 1),
+            self._movie("Матрица 2", "The Matrix 2", 2),
+            self._movie("Матрица 3", "The Matrix 3", 3),
+            self._movie("Начало", "Inception", 4),
+        ]
+        result = MovieAgent._pre_filter_franchise(movies, "Матрица", locale="ru")
+        assert len(result) == 1
+        assert result[0]["kp_id"] == 4
+
+    def test_removes_sequel_with_colon(self):
+        movies = [
+            self._movie("Матрица: Перезагрузка", "The Matrix: Reloaded", 1),
+            self._movie("Начало", "Inception", 2),
+        ]
+        result = MovieAgent._pre_filter_franchise(movies, "Матрица", locale="ru")
+        assert len(result) == 1
+        assert result[0]["kp_id"] == 2
+
+    def test_removes_roman_numeral_sequel(self):
+        movies = [
+            self._movie("Rocky", "Rocky", 1),
+            self._movie("Rocky IV", "Rocky IV", 2),
+            self._movie("Inception", "Inception", 3),
+        ]
+        result = MovieAgent._pre_filter_franchise(movies, "Rocky", locale="en")
+        assert len(result) == 1
+        assert result[0]["kp_id"] == 3
+
+    def test_keeps_unrelated_movies(self):
+        movies = [
+            self._movie("Начало", "Inception", 1),
+            self._movie("Интерстеллар", "Interstellar", 2),
+        ]
+        result = MovieAgent._pre_filter_franchise(movies, "Матрица", locale="ru")
+        assert len(result) == 2
+
+    def test_empty_source_returns_all(self):
+        movies = [self._movie("Матрица", "The Matrix", 1)]
+        result = MovieAgent._pre_filter_franchise(movies, "", locale="ru")
+        assert len(result) == 1
+
+    def test_en_locale_uses_title(self):
+        movies = [
+            self._movie("Матрица", "The Matrix", 1),
+            self._movie("Начало", "Inception", 2),
+        ]
+        result = MovieAgent._pre_filter_franchise(movies, "The Matrix", locale="en")
+        assert len(result) == 1
+        assert result[0]["kp_id"] == 2
+
+
+# ── Format movies for rerank ─────────────────────────────────────────
+
+class TestFormatMoviesForRerank:
+    def _movie(self, name: str, title: str, content: str) -> dict:
+        return {"name": name, "title": title, "page_content": content, "kp_id": 1}
+
+    def test_includes_ru_name(self):
+        movies = [self._movie("Матрица", "The Matrix", "Описание фильма")]
+        result = MovieAgent._format_movies_for_rerank(movies, locale="ru")
+        assert "[Матрица]" in result
+        assert "Описание фильма" in result
+
+    def test_includes_en_title(self):
+        movies = [self._movie("Матрица", "The Matrix", "Movie description")]
+        result = MovieAgent._format_movies_for_rerank(movies, locale="en")
+        assert "[The Matrix]" in result
+
+    def test_fallback_to_title_if_name_empty(self):
+        movies = [self._movie("", "The Matrix", "desc")]
+        result = MovieAgent._format_movies_for_rerank(movies, locale="ru")
+        assert "[The Matrix]" in result
+
+    def test_truncates_content(self):
+        long_content = "A" * 300
+        movies = [self._movie("Test", "Test", long_content)]
+        result = MovieAgent._format_movies_for_rerank(movies, locale="ru")
+        # Content should be truncated to 200 chars
+        assert len(result.split("] ")[1]) == 200
+
+
+# ── _get_movie_name ──────────────────────────────────────────────────
+
+class TestGetMovieName:
+    def test_ru_locale_returns_name(self):
+        movie = {"name": "Матрица", "title": "The Matrix"}
+        assert MovieAgent._get_movie_name(movie, "ru") == "Матрица"
+
+    def test_en_locale_returns_title(self):
+        movie = {"name": "Матрица", "title": "The Matrix"}
+        assert MovieAgent._get_movie_name(movie, "en") == "The Matrix"
+
+    def test_ru_fallback_to_title(self):
+        movie = {"name": "", "title": "The Matrix"}
+        assert MovieAgent._get_movie_name(movie, "ru") == "The Matrix"
+
+    def test_en_fallback_to_name(self):
+        movie = {"name": "Матрица", "title": ""}
+        assert MovieAgent._get_movie_name(movie, "en") == "Матрица"
+
+    def test_both_empty(self):
+        movie = {"name": "", "title": ""}
+        assert MovieAgent._get_movie_name(movie, "ru") == ""
+
+
+# ── _normalize_title ─────────────────────────────────────────────────
+
+class TestNormalizeTitle:
+    def test_lowercase(self):
+        assert MovieAgent._normalize_title("The Matrix") == "the matrix"
+
+    def test_strip(self):
+        assert MovieAgent._normalize_title("  Матрица  ") == "матрица"
+
+    def test_removes_colon_suffix(self):
+        assert MovieAgent._normalize_title("Матрица: Перезагрузка") == "матрица"
+
+    def test_removes_trailing_number(self):
+        assert MovieAgent._normalize_title("Матрица 2") == "матрица"
+
+    def test_removes_roman_numerals(self):
+        assert MovieAgent._normalize_title("Rocky IV") == "rocky"
+
+    def test_preserves_title_without_suffix(self):
+        assert MovieAgent._normalize_title("Начало") == "начало"
+
+    def test_empty_string(self):
+        assert MovieAgent._normalize_title("") == ""
+
+
+# ── _enrich_movie ────────────────────────────────────────────────────
+
+class TestEnrichMovie:
+    """Тесты для _enrich_movie (static, данные из Weaviate)."""
+
+    def _weaviate_movie(self, **overrides) -> dict:
+        base = {
+            "kp_id": 12345,
+            "tmdb_id": "tt111",
+            "imdb_id": "tt222",
+            "name": "Матрица",
+            "title": "The Matrix",
+            "description": "Описание на русском",
+            "overview": "English overview",
+            "year": 1999,
+            "movieLength": 136,
+            "rating_kp": 8.5,
+            "rating_imdb": 8.7,
+            "genres": ["фантастика", "боевик"],
+            "genres_tmdb": ["Science Fiction", "Action"],
+            "countries": ["США"],
+            "origin_country": ["US"],
+            "kp_file_path": "https://poster.kp/123.jpg",
+            "tmdb_file_path": "https://poster.tmdb/123.jpg",
+            "kp_background_color": "#1a1a1a",
+            "tmdb_background_color": "#2b2b2b",
+            "page_content": "Описание фильма...",
+        }
+        base.update(overrides)
+        return base
+
+    def test_telegram_returns_enriched_object(self):
+        movie = self._weaviate_movie()
+        result = MovieAgent._enrich_movie(movie, platform="telegram")
+        assert isinstance(result, EnrichedMovieObject)
+        assert result.movie_id == 12345
+        assert result.title_ru == "Матрица"
+        assert result.title_alt == "The Matrix"
+        assert result.overview == "Описание на русском"
+        assert result.year == 1999
+        assert result.rating_kp == 8.5
+        assert result.rating_imdb == 8.7
+        assert result.poster_url == "https://poster.kp/123.jpg"
+        assert result.background_color == "#1a1a1a"
+
+    def test_telegram_genres_converted(self):
+        movie = self._weaviate_movie()
+        result = MovieAgent._enrich_movie(movie, platform="telegram")
+        assert result.genres == [{"name": "фантастика"}, {"name": "боевик"}]
+
+    def test_ios_returns_localized_object(self):
+        movie = self._weaviate_movie()
+        result = MovieAgent._enrich_movie(movie, platform="ios", locale="ru")
+        assert isinstance(result, MovieResponseLocalized)
+        assert result.movie_id == 12345
+        assert result.name == "Матрица"
+        assert result.title == "The Matrix"
+        assert result.overview_ru == "Описание на русском"
+        assert result.overview_en == "English overview"
+
+    def test_ios_en_without_tmdb_id_returns_none(self):
+        movie = self._weaviate_movie(tmdb_id=None)
+        result = MovieAgent._enrich_movie(movie, platform="ios", locale="en")
+        assert result is None
+
+    def test_ios_en_with_tmdb_id_returns_object(self):
+        movie = self._weaviate_movie()
+        result = MovieAgent._enrich_movie(movie, platform="ios", locale="en")
+        assert isinstance(result, MovieResponseLocalized)
+
+    def test_missing_kp_id_returns_none(self):
+        movie = self._weaviate_movie(kp_id=None)
+        result = MovieAgent._enrich_movie(movie, platform="telegram")
+        assert result is None
+
+    def test_telegram_model_dump_has_all_fields(self):
+        movie = self._weaviate_movie()
+        result = MovieAgent._enrich_movie(movie, platform="telegram")
+        dump = result.model_dump()
+        assert "movie_id" in dump
+        assert "title_ru" in dump
+        assert "poster_url" in dump
+        assert "genres" in dump
+
+
+# ── Rerank prompts ───────────────────────────────────────────────────
+
+class TestRerankPrompts:
+    def test_ru_template_has_placeholders(self):
+        assert "{query}" in RERANK_PROMPT_TEMPLATE_RU
+        assert "{movies_list}" in RERANK_PROMPT_TEMPLATE_RU
+        assert "{exclude_instruction}" in RERANK_PROMPT_TEMPLATE_RU
+        assert "{criteria_context}" in RERANK_PROMPT_TEMPLATE_RU
+
+    def test_en_template_has_placeholders(self):
+        assert "{query}" in RERANK_PROMPT_TEMPLATE_EN
+        assert "{movies_list}" in RERANK_PROMPT_TEMPLATE_EN
+        assert "{exclude_instruction}" in RERANK_PROMPT_TEMPLATE_EN
+        assert "{criteria_context}" in RERANK_PROMPT_TEMPLATE_EN
+
+    def test_ru_template_formats_without_error(self):
+        result = RERANK_PROMPT_TEMPLATE_RU.format(
+            query="уютный фильм",
+            movies_list="1. [Фильм] Описание",
+            exclude_instruction="",
+            criteria_context="",
+        )
+        assert "уютный фильм" in result
+        assert "[Фильм]" in result
+
+    def test_en_template_formats_with_exclude(self):
+        result = RERANK_PROMPT_TEMPLATE_EN.format(
+            query="cozy movie",
+            movies_list="1. [Movie] Description",
+            exclude_instruction='EXCLUDE "The Matrix"',
+            criteria_context="Genres: Action",
+        )
+        assert "cozy movie" in result
+        assert 'EXCLUDE "The Matrix"' in result
+        assert "Genres: Action" in result
+
+    def test_model_rerank_is_set(self):
+        assert MODEL_RERANK
+        assert isinstance(MODEL_RERANK, str)

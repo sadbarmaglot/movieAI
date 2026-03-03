@@ -107,6 +107,7 @@ PROMPT_NUM_MOVIES = 20
 MODEL_QA = "gpt-5.1"
 TEMPERATURE_QA = 0.9
 MODEL_MOVIES = "gpt-4o-mini"
+MODEL_RERANK = "gpt-4o-mini"
 TEMPERATURE_MOVIES = 0.9
 QUESTION_PREFIX_PATTERN = r'\{\s*"questions"\s*:\s*\['
 MOVIES_PREFIX_PATTERN = r'\{\s*"movies"\s*:\s*\['
@@ -452,40 +453,34 @@ RERANK_PROMPT_TEMPLATE_RU = """
 Ты MovieAI-ассистент. Пользователь хочет фильм, соответствующий следующему описанию:
 
 "{query}"
+{criteria_context}
+{exclude_instruction}
 
-Вот список кандидатов (id фильмов и краткие описания):
+Вот список кандидатов (номер, название, описание):
 {movies_list}
 
-Отсортируй 100 фильмов по смысловой релевантности к запросу пользователя.
+Отсортируй фильмы по смысловой релевантности к запросу пользователя.
 
 ⚠️ Важно:
-- В ответе **только список номеров фильмов** по одному на строку (например, `1`, `2`, `3`).
-- Не добавляй комментариев, описаний или текста.
-- Просто напиши:
-1
-4
-3
-...
+- В ответе **только номера фильмов** по одному на строку.
+- Не добавляй комментариев или текста.
 """
 
 RERANK_PROMPT_TEMPLATE_EN = """
 You are a MovieAI assistant. The user wants a movie matching the following description:
 
 "{query}"
+{criteria_context}
+{exclude_instruction}
 
-Here is a list of candidates (movie IDs and brief descriptions):
+Here is a list of candidates (number, title, description):
 {movies_list}
 
-Sort 100 movies by semantic relevance to the user's query.
+Sort movies by semantic relevance to the user's query.
 
 ⚠️ Important:
-- In your response, **only a list of movie numbers**, one per line (e.g., `1`, `2`, `3`).
-- Don't add comments, descriptions, or text.
-- Just write:
-1
-4
-3
-...
+- In your response, **only movie numbers**, one per line.
+- Don't add comments or text.
 """
 
 # Для обратной совместимости
