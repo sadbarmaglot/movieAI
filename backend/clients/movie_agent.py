@@ -237,6 +237,7 @@ class MovieAgent:
         rerank_prompt = rerank_template.format(
             query=query,
             movies_list=self._format_movies_for_rerank(movies, locale),
+            movies_count=len(movies),
             exclude_instruction=exclude_instruction,
             criteria_context=criteria_context,
         )
@@ -703,10 +704,17 @@ class MovieAgent:
                     f"[MovieAgent] Ошибка rerank (выдано {len(reranked_movies)} фильмов): {e}, "
                     f"fallback на оставшиеся фильмы"
                 )
+
+            # Дополнить фильмами, которые реранк не вернул (модель может вернуть не все)
+            if len(reranked_movies) < len(movies):
                 reranked_kp_ids = {m.get("kp_id") for m in reranked_movies}
-                for movie in movies:
-                    if movie.get("kp_id") not in reranked_kp_ids:
-                        reranked_movies.append(movie)
+                remaining = [m for m in movies if m.get("kp_id") not in reranked_kp_ids]
+                if remaining:
+                    logger.info(
+                        f"[MovieAgent] Rerank вернул {len(reranked_movies)}/{len(movies)}, "
+                        f"дополняем {len(remaining)} фильмами в исходном порядке"
+                    )
+                    reranked_movies.extend(remaining)
 
             for movie in reranked_movies:
                 rerank_count += 1

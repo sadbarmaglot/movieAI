@@ -534,12 +534,14 @@ class TestRerankPrompts:
     def test_ru_template_has_placeholders(self):
         assert "{query}" in RERANK_PROMPT_TEMPLATE_RU
         assert "{movies_list}" in RERANK_PROMPT_TEMPLATE_RU
+        assert "{movies_count}" in RERANK_PROMPT_TEMPLATE_RU
         assert "{exclude_instruction}" in RERANK_PROMPT_TEMPLATE_RU
         assert "{criteria_context}" in RERANK_PROMPT_TEMPLATE_RU
 
     def test_en_template_has_placeholders(self):
         assert "{query}" in RERANK_PROMPT_TEMPLATE_EN
         assert "{movies_list}" in RERANK_PROMPT_TEMPLATE_EN
+        assert "{movies_count}" in RERANK_PROMPT_TEMPLATE_EN
         assert "{exclude_instruction}" in RERANK_PROMPT_TEMPLATE_EN
         assert "{criteria_context}" in RERANK_PROMPT_TEMPLATE_EN
 
@@ -547,16 +549,19 @@ class TestRerankPrompts:
         result = RERANK_PROMPT_TEMPLATE_RU.format(
             query="уютный фильм",
             movies_list="1. [Фильм] Описание",
+            movies_count=50,
             exclude_instruction="",
             criteria_context="",
         )
         assert "уютный фильм" in result
         assert "[Фильм]" in result
+        assert "50" in result
 
     def test_en_template_formats_with_exclude(self):
         result = RERANK_PROMPT_TEMPLATE_EN.format(
             query="cozy movie",
             movies_list="1. [Movie] Description",
+            movies_count=30,
             exclude_instruction='EXCLUDE "The Matrix"',
             criteria_context="Genres: Action",
         )

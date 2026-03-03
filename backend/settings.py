@@ -456,13 +456,13 @@ RERANK_PROMPT_TEMPLATE_RU = """
 {criteria_context}
 {exclude_instruction}
 
-Вот список кандидатов (номер, название, описание):
+Вот список из {movies_count} кандидатов (номер, название, описание):
 {movies_list}
 
-Отсортируй фильмы по смысловой релевантности к запросу пользователя.
+Отсортируй ВСЕ {movies_count} фильмов по смысловой релевантности к запросу пользователя. Верни ВСЕ номера, не пропуская ни одного.
 
 ⚠️ Важно:
-- В ответе **только номера фильмов** по одному на строку.
+- В ответе **все {movies_count} номеров фильмов** по одному на строку.
 - Не добавляй комментариев или текста.
 """
 
@@ -473,13 +473,13 @@ You are a MovieAI assistant. The user wants a movie matching the following descr
 {criteria_context}
 {exclude_instruction}
 
-Here is a list of candidates (number, title, description):
+Here is a list of {movies_count} candidates (number, title, description):
 {movies_list}
 
-Sort movies by semantic relevance to the user's query.
+Sort ALL {movies_count} movies by semantic relevance to the user's query. Return ALL numbers, skip none.
 
 ⚠️ Important:
-- In your response, **only movie numbers**, one per line.
+- In your response, **all {movies_count} movie numbers**, one per line.
 - Don't add comments or text.
 """
 
