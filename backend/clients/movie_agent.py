@@ -733,13 +733,13 @@ class MovieAgent:
                     )
                     continue
                 
-                # Проверка на то, что фильм не в exclude_set - пропускаем
-                if kp_id in exclude_set:
+                # Проверка на exclude_set (пропускаем только для рекомендаций, не для прямого поиска)
+                is_direct_search = movie_name and (not query or not query.strip())
+                if kp_id in exclude_set and not is_direct_search:
                     skipped_excluded += 1
                     logger.warning(
                         f"[MovieAgent] Пропускаем фильм из exclude_set! "
                         f"kp_id={kp_id} находится в exclude_set для user_id={user_id}"
-                        # f"но попал в результаты rerank"
                     )
                     continue
                 
