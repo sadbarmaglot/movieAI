@@ -691,10 +691,22 @@ class MovieAgent:
             skipped_duplicates = 0
             skipped_excluded = 0
 
+            # Автоматическое определение необходимости реранка
+            # Реранк полезен для: "похожие на X", жанровые/атмосферные запросы
+            # Реранк не нужен для: прямой поиск фильма, поиск по актёру/режиссёру
+            is_direct_search = movie_name and (not query or not query.strip())
+            is_cast_director_search = (cast or directors) and (not query or not query.strip())
+            auto_skip_rerank = is_direct_search or is_cast_director_search
+
+            if auto_skip_rerank and not skip_rerank:
+                skip_reason = "прямой поиск фильма" if is_direct_search else "поиск по актёру/режиссёру"
+                logger.info(f"[MovieAgent] Авто-пропуск реранка: {skip_reason}")
+
             # Реранк с fallback на прямую итерацию при ошибке
             reranked_movies = []
-            if skip_rerank:
-                logger.info("[MovieAgent] skip_rerank=true, пропускаем реранк")
+            if skip_rerank or auto_skip_rerank:
+                if skip_rerank:
+                    logger.info("[MovieAgent] skip_rerank=true, пропускаем реранк")
                 reranked_movies = list(movies)
             else:
                 try:
