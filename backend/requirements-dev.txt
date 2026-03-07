@@ -5,3 +5,5 @@ pytest-mock
 asyncpg
 sqlalchemy
 fastapi
+websockets
+pytest-xdist

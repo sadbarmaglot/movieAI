@@ -350,7 +350,8 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
     movie_name = data.get("movie_name")
     rating_kp = data.get("rating_kp", 0.0)
     rating_imdb = data.get("rating_imdb", 0.0)
-    
+    skip_rerank = data.get("skip_rerank", False)
+
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
         platform=platform,
@@ -365,7 +366,8 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
         suggested_titles=suggested_titles,
         movie_name=movie_name,
         rating_kp=rating_kp,
-        rating_imdb=rating_imdb
+        rating_imdb=rating_imdb,
+        skip_rerank=skip_rerank,
     ):
         if websocket.application_state != WebSocketState.CONNECTED:
             break

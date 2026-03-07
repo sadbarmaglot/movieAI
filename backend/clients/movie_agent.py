@@ -30,7 +30,7 @@ from settings import (
     get_agent_tools,
     RERANK_PROMPT_TEMPLATE_RU,
     RERANK_PROMPT_TEMPLATE_EN,
-    DEFAULT_LOCALE
+    DEFAULT_LOCALE,
 )
 
 logger = logging.getLogger(__name__)
@@ -623,7 +623,8 @@ class MovieAgent:
             suggested_titles: list = None,
             movie_name: str = None,
             rating_kp: float = 0.0,
-            rating_imdb: float = 0.0
+            rating_imdb: float = 0.0,
+            skip_rerank: bool = False,
     ) -> AsyncGenerator[dict, None]:
         """
         Поиск фильмов на основе финального запроса
@@ -692,29 +693,33 @@ class MovieAgent:
 
             # Реранк с fallback на прямую итерацию при ошибке
             reranked_movies = []
-            try:
-                async for movie in self._rerank_movies_streaming(
-                    query, movies, locale=locale,
-                    source_movie_name=movie_name,
-                    genres=genres,
-                ):
-                    reranked_movies.append(movie)
-            except Exception as e:
-                logger.error(
-                    f"[MovieAgent] Ошибка rerank (выдано {len(reranked_movies)} фильмов): {e}, "
-                    f"fallback на оставшиеся фильмы"
-                )
-
-            # Дополнить фильмами, которые реранк не вернул (модель может вернуть не все)
-            if len(reranked_movies) < len(movies):
-                reranked_kp_ids = {m.get("kp_id") for m in reranked_movies}
-                remaining = [m for m in movies if m.get("kp_id") not in reranked_kp_ids]
-                if remaining:
-                    logger.info(
-                        f"[MovieAgent] Rerank вернул {len(reranked_movies)}/{len(movies)}, "
-                        f"дополняем {len(remaining)} фильмами в исходном порядке"
+            if skip_rerank:
+                logger.info("[MovieAgent] skip_rerank=true, пропускаем реранк")
+                reranked_movies = list(movies)
+            else:
+                try:
+                    async for movie in self._rerank_movies_streaming(
+                        query, movies, locale=locale,
+                        source_movie_name=movie_name,
+                        genres=genres,
+                    ):
+                        reranked_movies.append(movie)
+                except Exception as e:
+                    logger.error(
+                        f"[MovieAgent] Ошибка rerank (выдано {len(reranked_movies)} фильмов): {e}, "
+                        f"fallback на оставшиеся фильмы"
                     )
-                    reranked_movies.extend(remaining)
+
+                # Дополнить фильмами, которые реранк не вернул (модель может вернуть не все)
+                if len(reranked_movies) < len(movies):
+                    reranked_kp_ids = {m.get("kp_id") for m in reranked_movies}
+                    remaining = [m for m in movies if m.get("kp_id") not in reranked_kp_ids]
+                    if remaining:
+                        logger.info(
+                            f"[MovieAgent] Rerank вернул {len(reranked_movies)}/{len(movies)}, "
+                            f"дополняем {len(remaining)} фильмами в исходном порядке"
+                        )
+                        reranked_movies.extend(remaining)
 
             for movie in reranked_movies:
                 rerank_count += 1
