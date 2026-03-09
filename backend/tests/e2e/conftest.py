@@ -282,6 +282,15 @@ def test_device_id():
     return TEST_DEVICE_ID
 
 
+# -- CLI options --------------------------------------------------------------
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--skip-rerank", action="store_true", default=False,
+        help="Skip reranking in movie streaming (compare raw Weaviate order)",
+    )
+
+
 # -- Report generation -------------------------------------------------------
 
 REPORTS_DIR = Path(__file__).parent / "reports"

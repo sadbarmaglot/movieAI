@@ -17,12 +17,6 @@ from .conftest import run_qa_scenario, run_movie_stream
 from .scenarios import ALL_QA_SCENARIOS, QAScenario
 
 
-def pytest_addoption(parser):
-    parser.addoption(
-        "--skip-rerank", action="store_true", default=False,
-        help="Skip reranking in movie streaming (compare raw Weaviate order)",
-    )
-
 
 @pytest.mark.e2e
 @pytest.mark.parametrize(

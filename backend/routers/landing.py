@@ -1,16 +1,99 @@
 """
 API endpoints для SEO-лендинга
 """
+import asyncio
 import logging
+import re
 from typing import List, Optional
+
 from fastapi import APIRouter, Request, HTTPException, status
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from clients.weaviate_client import MovieWeaviateRecommender
+from settings import RERANK_PROMPT_TEMPLATE_RU, RERANK_PROMPT_TEMPLATE_EN, MODEL_RERANK
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _rerank_movies(
+    openai_client: AsyncOpenAI,
+    query: str,
+    movies: List[dict],
+    locale: str = "ru",
+    source_movie_name: str | None = None,
+) -> List[dict]:
+    """Реранк фильмов через OpenAI (не-стриминговый, для лендинга)."""
+    if not movies:
+        return movies
+
+    # Форматируем список фильмов
+    lines = []
+    for i, m in enumerate(movies):
+        name = m.get("name") or m.get("title") or ""
+        desc = (m.get("page_content") or "")[:200]
+        lines.append(f"{i + 1}. [{name}] {desc}")
+    movies_list = "\n".join(lines)
+
+    # Exclude instruction
+    exclude_instruction = ""
+    if source_movie_name:
+        if locale == "en":
+            exclude_instruction = f"\n⚠️ EXCLUDE the movie \"{source_movie_name}\" itself from the ranking."
+        else:
+            exclude_instruction = f"\n⚠️ ИСКЛЮЧИ сам фильм \"{source_movie_name}\" из ранжирования."
+
+    template = RERANK_PROMPT_TEMPLATE_EN if locale == "en" else RERANK_PROMPT_TEMPLATE_RU
+    prompt = template.format(
+        query=query,
+        movies_list=movies_list,
+        movies_count=len(movies),
+        exclude_instruction=exclude_instruction,
+        criteria_context="",
+    )
+
+    system_content = (
+        "You are a movie recommendation assistant." if locale == "en"
+        else "Ты помощник по подбору фильмов."
+    )
+
+    try:
+        response = await asyncio.wait_for(
+            openai_client.chat.completions.create(
+                model=MODEL_RERANK,
+                messages=[
+                    {"role": "system", "content": system_content},
+                    {"role": "user", "content": prompt},
+                ],
+            ),
+            timeout=30,
+        )
+
+        content = response.choices[0].message.content or ""
+        reranked = []
+        seen = set()
+        for line in content.strip().split("\n"):
+            match = re.match(r"(\d+)", line.strip())
+            if match:
+                idx = int(match.group(1)) - 1
+                if 0 <= idx < len(movies) and idx not in seen:
+                    seen.add(idx)
+                    reranked.append(movies[idx])
+
+        # Дополняем фильмами, которые реранк не вернул
+        if len(reranked) < len(movies):
+            reranked_kp_ids = {m.get("kp_id") for m in reranked}
+            remaining = [m for m in movies if m.get("kp_id") not in reranked_kp_ids]
+            reranked.extend(remaining)
+
+        logger.info(f"[Landing] Rerank: {len(reranked)} фильмов отсортировано")
+        return reranked
+
+    except Exception as e:
+        logger.error(f"[Landing] Ошибка rerank: {e}, возвращаем исходный порядок")
+        return movies
 
 
 class SimilarMoviesResponse(BaseModel):
@@ -33,7 +116,7 @@ async def get_movies_like(
     Args:
         movie_slug: Slug названия фильма (например, "the-matrix" или "matrica")
         locale: Локализация ('ru' or 'en')
-        limit: Количество похожих фильмов (по умолчанию 8, максимум 8)
+        limit: Количество похожих фильмов (по умолчанию 9, максимум 9)
         kp_id: Опциональный kp_id фильма. Если указан, используется напрямую без поиска по названию
     
     Returns:
@@ -106,13 +189,24 @@ async def get_movies_like(
             source_kp_id=source_kp_id,
             exclude_kp_ids=None  # На лендинге не исключаем фильмы
         )
-        
+
+        # Определяем название фильма для лога и реранка
+        movie_title_for_log = source_movie.get("name") or source_movie.get("title") or movie_slug
+
+        # Реранк через OpenAI
+        openai_client: AsyncOpenAI = request.app.state.openai_client
+        query = f"фильмы похожие на {movie_title_for_log}" if locale == "ru" else f"movies similar to {movie_title_for_log}"
+        similar_movies = await _rerank_movies(
+            openai_client=openai_client,
+            query=query,
+            movies=similar_movies,
+            locale=locale,
+            source_movie_name=movie_title_for_log,
+        )
+
         # Ограничиваем количество результатов
         similar_movies = similar_movies[:limit]
-        
-        # Определяем название фильма для лога
-        movie_title_for_log = source_movie.get("name") or source_movie.get("title") or movie_slug
-        
+
         logger.info(
             f"[Landing] Найдено {len(similar_movies)} похожих фильмов для '{movie_title_for_log}' (kp_id={source_kp_id})"
         )
