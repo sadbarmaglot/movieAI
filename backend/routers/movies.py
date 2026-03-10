@@ -17,10 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List, Callable, Awaitable, TypedDict, Any, Union
 
 
+import time
+
 from clients import (
     kp_client,
     openai_client_base_async,
     openai_client,
+    session_logger,
 )
 from clients.weaviate_client import MovieWeaviateRecommender
 from clients.movie_agent import MovieAgent
@@ -198,10 +201,17 @@ async def add_skipped_movie(
     movie_manager: MovieManager = Depends(get_movie_manager)
 ):
     await movie_manager.add_skipped_movies(
-        user_id=body.user_id, 
+        user_id=body.user_id,
         kp_id=body.movie_id,
         platform=body.platform
     )
+    if body.session_id:
+        await session_logger.log_event(
+            user_id=str(body.user_id),
+            session_id=body.session_id,
+            action="movie_skip",
+            extra={"kp_id": body.movie_id},
+        )
 
 
 async def _process_agent_results(
@@ -210,7 +220,8 @@ async def _process_agent_results(
     user_input: str,
     add_user_message: bool,
     last_tool_call_id_ref: dict,
-    locale: str = "ru"
+    locale: str = "ru",
+    qa_context: dict = None,
 ):
     async for result in agent.run_qa(user_input=user_input, add_user_message=add_user_message, locale=locale):
         if websocket.application_state != WebSocketState.CONNECTED:
@@ -219,9 +230,15 @@ async def _process_agent_results(
 
         if result["type"] == "question":
             last_tool_call_id_ref["id"] = result["tool_call_id"]
+            if qa_context is not None:
+                qa_context["questions"].append({
+                    "question": result.get("question", ""),
+                    "suggestions": result.get("suggestions", []),
+                })
         elif result["type"] == "search":
             await websocket.send_json({"type": "done"})
-            # Не закрываем WebSocket — позволяем клиенту вернуться для уточнения
+            if qa_context is not None:
+                qa_context["search_result"] = result
             return
 
 
@@ -242,6 +259,34 @@ async def movie_agent_qa_ws(websocket: WebSocket):
     last_tool_call_id_ref: dict[str, Optional[str]] = {"id": None}
     search_completed = False  # Флаг: агент уже выполнил поиск (done отправлен)
 
+    # Session logging state
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+    qa_start_time: Optional[float] = None
+    qa_context: dict = {"questions": [], "search_result": None, "user_query": ""}
+
+    async def _log_qa_complete():
+        if session_id and qa_context.get("search_result"):
+            search = qa_context["search_result"]
+            await session_logger.log_event(
+                user_id=user_id or "",
+                session_id=session_id,
+                action="qa_complete",
+                locale=locale,
+                extra={
+                    "user_query": qa_context["user_query"],
+                    "questions": qa_context["questions"],
+                    "search_criteria": {
+                        k: v for k, v in search.items() if k != "type"
+                    },
+                    "questions_count": len(qa_context["questions"]),
+                    "duration_ms": int((time.time() - qa_start_time) * 1000) if qa_start_time else None,
+                },
+            )
+            # Reset для следующего уточнения в той же сессии
+            qa_context["questions"] = []
+            qa_context["search_result"] = None
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -249,6 +294,10 @@ async def movie_agent_qa_ws(websocket: WebSocket):
             # Обновить locale из данных запроса
             if "locale" in data:
                 locale = data["locale"]
+            if "session_id" in data:
+                session_id = data["session_id"]
+            if "user_id" in data:
+                user_id = str(data["user_id"])
 
             # Поддержка refine_context при переподключении (WebSocket упал, клиент восстанавливает контекст)
             if "refine_context" in data and not search_completed:
@@ -266,6 +315,8 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                     agent.inject_refinement_context(locale=locale)
                     search_completed = False
 
+                qa_start_time = time.time()
+                qa_context["user_query"] = data["query"]
                 last_tool_call_id_ref["id"] = None
                 await _process_agent_results(
                     websocket=websocket,
@@ -273,12 +324,14 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                     user_input=data["query"],
                     add_user_message=True,
                     last_tool_call_id_ref=last_tool_call_id_ref,
-                    locale=locale
+                    locale=locale,
+                    qa_context=qa_context,
                 )
                 # После _process_agent_results: если вернулся после "done", значит поиск завершён
                 # Проверяем — если last_tool_call_id пуст, значит не вопрос, а search/done
                 if last_tool_call_id_ref["id"] is None:
                     search_completed = True
+                    await _log_qa_complete()
             elif "answer" in data:
                 if last_tool_call_id_ref["id"]:
                     await agent.answer_tool_call(
@@ -291,16 +344,21 @@ async def movie_agent_qa_ws(websocket: WebSocket):
                 else:
                     user_input = data["answer"]
                     add_user_message = True
+                # Записываем ответ пользователя в контекст
+                if qa_context["questions"]:
+                    qa_context["questions"][-1]["answer"] = data["answer"]
                 await _process_agent_results(
                     websocket=websocket,
                     agent=agent,
                     user_input=user_input,
                     add_user_message=add_user_message,
                     last_tool_call_id_ref=last_tool_call_id_ref,
-                    locale=locale
+                    locale=locale,
+                    qa_context=qa_context,
                 )
                 if last_tool_call_id_ref["id"] is None:
                     search_completed = True
+                    await _log_qa_complete()
             else:
                 await websocket.send_json(
                     {"error": "Invalid payload: expected 'query' or 'answer'"}
@@ -326,6 +384,7 @@ class BasePayload(TypedDict, total=False):
     user_id: Union[int, str]  # int для Telegram, str (device_id) для iOS
     platform: Optional[str]  # 'telegram' or 'ios'
     locale: Optional[str]  # 'ru' or 'en' - локализация клиента
+    session_id: Optional[str]  # UUID сессии для логирования
     query: Optional[str]
     genres: Optional[list[str]]
     atmospheres: Optional[list[str]]
@@ -340,9 +399,9 @@ class BasePayload(TypedDict, total=False):
 async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: MovieAgent):
     platform = data.get("platform", "telegram")
     locale = data.get("locale", "ru")  # Получаем локализацию из запроса
-    
+
     genres = data.get("genres")
-    
+
     atmospheres = data.get("atmospheres")
     cast = data.get("cast")
     directors = data.get("directors")
@@ -351,6 +410,9 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
     rating_kp = data.get("rating_kp", 0.0)
     rating_imdb = data.get("rating_imdb", 0.0)
     skip_rerank = data.get("skip_rerank", False)
+
+    stream_start = time.time()
+    recommended_kp_ids = []
 
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
@@ -372,9 +434,27 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
         if websocket.application_state != WebSocketState.CONNECTED:
             break
         await websocket.send_json(result)
-    
+        if result.get("type") == "movie":
+            recommended_kp_ids.append(result.get("movie_id"))
+
     if websocket.application_state == WebSocketState.CONNECTED:
         await websocket.send_text("__END__")
+
+    # Log stream_complete
+    sid = data.get("session_id")
+    if sid:
+        await session_logger.log_event(
+            user_id=str(data.get("user_id", "")),
+            session_id=sid,
+            action="stream_complete",
+            locale=locale,
+            extra={
+                "recommended_kp_ids": recommended_kp_ids,
+                "count": len(recommended_kp_ids),
+                "rerank_used": not skip_rerank,
+                "duration_ms": int((time.time() - stream_start) * 1000),
+            },
+        )
 
 
 async def handle_movie_wv_streaming(websocket: WebSocket, data: dict, recommender: MovieWeaviateRecommender):

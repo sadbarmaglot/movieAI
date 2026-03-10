@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Request
 
+from clients import session_logger
 from db_managers import FavoriteManager, MovieManager
 from models import (
     GetFavoriteResponse,
@@ -36,11 +37,18 @@ async def add_favorite_movie(
     favorite_manager: FavoriteManager = Depends(get_favorite_manager),
 ):
     await favorite_manager.add_favorite(
-        user_id=body.user_id, 
-        kp_id=body.movie_id, 
+        user_id=body.user_id,
+        kp_id=body.movie_id,
         platform=body.platform,
         is_watched=body.is_watched or False
     )
+    if body.session_id:
+        await session_logger.log_event(
+            user_id=str(body.user_id),
+            session_id=body.session_id,
+            action="movie_favorite",
+            extra={"kp_id": body.movie_id, "is_watched": body.is_watched or False},
+        )
 
 @router.post("/delete-favorites")
 async def delete_favorite_movie(

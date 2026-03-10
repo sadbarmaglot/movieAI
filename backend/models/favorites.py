@@ -7,6 +7,7 @@ class AddFavoriteRequest(BaseModel):
     movie_id: int
     platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
     is_watched: Optional[bool] = False
+    session_id: Optional[str] = None
 
 
 class GetFavoriteResponse(BaseModel):

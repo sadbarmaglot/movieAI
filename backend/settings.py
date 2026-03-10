@@ -96,6 +96,7 @@ ALLOW_ORIGINS = [
 
 # clients.bq_client
 TABLE_ID = "autogen-1-438415.movieAI_logs.page_views"
+SESSION_TABLE_ID = "autogen-1-438415.movieAI_logs.movie_sessions"
 
 # clients.client_factory
 KP_API_KEY = os.environ["KINOPOISK_API_KEY"]
@@ -226,7 +227,7 @@ SYSTEM_PROMPT_AGENT_RU = f"""
 ПРАВИЛА:
 - Пользователь называет конкретный фильм → сразу `search_movies_by_vector` с `movie_name`. НЕ задавай вопросов.
 - "Похожие на [фильм]" / "типа [фильма]" → `movie_name` + `query` с описанием атмосферы/жанра фильма. Пример: "похожие на Матрицу" → movie_name="Матрица", query="научная фантастика, виртуальная реальность, экшен, киберпанк".
-- "Фильмы [фамилия]" = запрос режиссера/актера → используй `directors`/`cast`, НЕ `movie_name`.
+- "Фильмы [фамилия]" = запрос режиссера/актера → используй `search_movies_by_vector` с `directors`/`cast`, БЕЗ `query` и БЕЗ `movie_name`. Бэкенд найдет фильмы по метаданным, query только мешает.
 - Сериалы — в базе ТОЛЬКО фильмы. Используй `query` с описанием стиля/атмосферы сериала.
 - В остальных случаях используй `ask_user_question` с 3-5 короткими suggestions. Никогда не отвечай текстом напрямую.
 
@@ -243,6 +244,7 @@ SYSTEM_PROMPT_AGENT_RU = f"""
 АТМОСФЕРЫ (ТОЛЬКО эти): про любовь, душевный и трогательный, динамичный и напряженный, жизнеутверждающий, мрачный и атмосферный, сюрреалистичный, психологический, медитативный, депрессивный
 
 ВЫБОР ИНСТРУМЕНТА:
+- Запрос по актёру/режиссёру → ВСЕГДА `search_movies_by_vector` с `cast`/`directors`. НЕ используй `suggest_movie_titles`.
 - Если можешь предложить минимум 10 конкретных релевантных названий → `suggest_movie_titles` (названия на РУССКОМ).
 - Иначе → `search_movies_by_vector` с развернутым описанием.
 
@@ -261,7 +263,7 @@ You are a MovieAI agent that recommends movies.
 RULES:
 - User names a specific movie → immediately `search_movies_by_vector` with `movie_name`. Do NOT ask questions.
 - "Similar to [movie]" / "like [movie]" → `movie_name` + `query` with atmosphere/genre description. Example: "similar to Matrix" → movie_name="Matrix", query="sci-fi, virtual reality, action, cyberpunk".
-- "Movies [surname]" = director/actor request → use `directors`/`cast`, NOT `movie_name`.
+- "Movies by [surname]" = director/actor request → use `search_movies_by_vector` with `directors`/`cast`, WITHOUT `query` and WITHOUT `movie_name`. The backend finds movies by metadata, query only interferes.
 - TV series — the database has ONLY movies. Use `query` with a description of the series' style/atmosphere.
 - Otherwise use `ask_user_question` with 3-5 short suggestions. Never respond with plain text.
 
@@ -278,6 +280,7 @@ GENRES (ONLY these English names): Action, Adventure, Animation, Comedy, Crime, 
 ATMOSPHERES (ONLY these): about love, touching and heartfelt, dynamic and intense, uplifting, dark and atmospheric, surreal, psychological, meditative, depressive
 
 TOOL CHOICE:
+- Actor/director request → ALWAYS `search_movies_by_vector` with `cast`/`directors`. Do NOT use `suggest_movie_titles`.
 - If you can suggest at least 10 specific relevant titles → `suggest_movie_titles` (titles in ENGLISH).
 - Otherwise → `search_movies_by_vector` with a detailed description.
 
