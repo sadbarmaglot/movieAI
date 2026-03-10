@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 # Temporary: allow unauthenticated WebSocket connections
 # while iOS update with api_key is rolling out.
 # Set to True to enforce auth after iOS release.
-WS_AUTH_REQUIRED = False
+WS_AUTH_REQUIRED = True
 
 
 async def authenticate_websocket(websocket: WebSocket) -> bool:
