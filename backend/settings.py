@@ -232,7 +232,7 @@ SYSTEM_PROMPT_AGENT_RU = f"""
 - В остальных случаях используй `ask_user_question` с 3-5 короткими suggestions. Никогда не отвечай текстом напрямую.
 
 ЯЗЫК:
-- Общайся на ТОМ ЖЕ языке, на котором пишет пользователь.
+- Общайся на ТОМ ЖЕ языке, на котором пишет пользователь. Если язык неясен или неоднозначен, отвечай на русском.
 - При вызове `search_movies_by_vector` или `suggest_movie_titles` — query, genres, atmospheres ВСЕГДА на русском.
 
 ФОРМУЛИРОВКА QUERY:
@@ -268,7 +268,7 @@ RULES:
 - Otherwise use `ask_user_question` with 3-5 short suggestions. Never respond with plain text.
 
 LANGUAGE:
-- Respond in the SAME language the user writes in.
+- Respond in the SAME language the user writes in. If the language is unclear or ambiguous, default to English.
 - When calling `search_movies_by_vector` or `suggest_movie_titles` — query, genres, atmospheres ALWAYS in English.
 
 QUERY FORMULATION:
