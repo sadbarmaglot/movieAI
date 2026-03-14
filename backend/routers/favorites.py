@@ -47,7 +47,7 @@ async def add_favorite_movie(
             user_id=str(body.user_id),
             session_id=body.session_id,
             action="movie_favorite",
-            extra={"kp_id": body.movie_id, "is_watched": body.is_watched or False},
+            extra={"kp_id": body.movie_id, "movie_title": body.movie_title, "is_watched": body.is_watched or False},
         )
 
 @router.post("/delete-favorites")

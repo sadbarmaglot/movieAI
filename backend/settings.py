@@ -468,6 +468,7 @@ RERANK_PROMPT_TEMPLATE_RU = """
 
 ⚠️ Важно:
 - В ответе **все {movies_count} номеров фильмов** по одному на строку.
+- Каждый номер **ровно один раз**, без повторений.
 - Не добавляй комментариев или текста.
 """
 
@@ -485,6 +486,7 @@ Sort ALL {movies_count} movies by semantic relevance to the user's query. Return
 
 ⚠️ Important:
 - In your response, **all {movies_count} movie numbers**, one per line.
+- Each number **exactly once**, no duplicates.
 - Don't add comments or text.
 """
 

@@ -709,9 +709,10 @@ class MovieAgent:
                     logger.info("[MovieAgent] skip_rerank=true, пропускаем реранк")
                 reranked_movies = list(movies)
             else:
+                rerank_input = movies[:40]
                 try:
                     async for movie in self._rerank_movies_streaming(
-                        query, movies, locale=locale,
+                        query, rerank_input, locale=locale,
                         source_movie_name=movie_name,
                         genres=genres,
                     ):
@@ -723,12 +724,12 @@ class MovieAgent:
                     )
 
                 # Дополнить фильмами, которые реранк не вернул (модель может вернуть не все)
-                if len(reranked_movies) < len(movies):
+                if len(reranked_movies) < len(rerank_input):
                     reranked_kp_ids = {m.get("kp_id") for m in reranked_movies}
-                    remaining = [m for m in movies if m.get("kp_id") not in reranked_kp_ids]
+                    remaining = [m for m in rerank_input if m.get("kp_id") not in reranked_kp_ids]
                     if remaining:
                         logger.info(
-                            f"[MovieAgent] Rerank вернул {len(reranked_movies)}/{len(movies)}, "
+                            f"[MovieAgent] Rerank вернул {len(reranked_movies)}/{len(rerank_input)}, "
                             f"дополняем {len(remaining)} фильмами в исходном порядке"
                         )
                         reranked_movies.extend(remaining)

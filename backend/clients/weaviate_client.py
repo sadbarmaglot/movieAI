@@ -73,6 +73,13 @@ class MovieWeaviateRecommender:
             return "аниме" not in selected_genres
         return False
 
+    @staticmethod
+    def _genre_overlap_score(movie_genres: List[str], requested_genres: List[str]) -> int:
+        """Количество совпавших жанров — чем больше, тем выше вероятность правильного матча."""
+        movie_set = {g.lower() for g in movie_genres}
+        requested_set = {g.lower() for g in requested_genres}
+        return len(movie_set & requested_set)
+
     @classmethod
     def _return_properties(cls) -> List[str]:
         """
@@ -298,6 +305,15 @@ class MovieWeaviateRecommender:
                 # Fallback: используем query как обычный гибридный поиск
                 # (продолжаем выполнение — упадём в Path 3 ниже)
             else:
+                # Если кандидатов несколько — берём того, у кого больше совпадений жанров.
+                # BM25-rank служит tiebreaker'ом (список уже отсортирован по нему).
+                if len(movies_by_title) > 1 and genres:
+                    movies_by_title = sorted(
+                        movies_by_title,
+                        key=lambda m: self._genre_overlap_score(m.get("genres", []), genres),
+                        reverse=True,
+                    )
+
                 source_movie = movies_by_title[0]
                 source_kp_id = source_movie.get("kp_id")
                 source_name = source_movie.get("name", "") or source_movie.get("title", "")
@@ -309,23 +325,17 @@ class MovieWeaviateRecommender:
                         f"fallback на гибридный поиск"
                     )
                 else:
-                    # Валидация: проверяем совпадение жанров BM25-результата с запрошенными
-                    genre_validated = True
-                    if genres:
-                        requested_lower = {g.lower() for g in genres}
-                        found_lower = set(source_movie_genres)
-                        if not found_lower & requested_lower:
-                            genre_validated = False
-                            logger.warning(
-                                f"[WeaviateRecommender] BM25 нашёл '{source_name}' (kp_id={source_kp_id}) "
-                                f"с жанрами {source_movie_genres}, но запрошены {genres}. "
-                                f"Жанры не пересекаются — fallback на гибридный поиск."
-                            )
-
-                    if genre_validated:
+                    genre_overlap = self._genre_overlap_score(source_movie_genres, genres) if genres else 1
+                    if genres and genre_overlap == 0:
+                        logger.warning(
+                            f"[WeaviateRecommender] Лучший кандидат '{source_name}' (kp_id={source_kp_id}) "
+                            f"с жанрами {source_movie_genres} не пересекается с запрошенными {genres}. "
+                            f"Fallback на гибридный поиск."
+                        )
+                    else:
                         logger.info(
-                            f"[WeaviateRecommender] Найден фильм '{source_name}' (kp_id={source_kp_id}), "
-                            f"жанры={source_movie_genres}, ищем похожие"
+                            f"[WeaviateRecommender] Выбран кандидат '{source_name}' (kp_id={source_kp_id}), "
+                            f"жанры={source_movie_genres}, overlap={genre_overlap}, ищем похожие"
                         )
 
                         similar_movies = await self.recommend_similar(

@@ -210,7 +210,7 @@ async def add_skipped_movie(
             user_id=str(body.user_id),
             session_id=body.session_id,
             action="movie_skip",
-            extra={"kp_id": body.movie_id},
+            extra={"kp_id": body.movie_id, "movie_title": body.movie_title},
         )
 
 
@@ -412,7 +412,7 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
     skip_rerank = data.get("skip_rerank", False)
 
     stream_start = time.time()
-    recommended_kp_ids = []
+    recommended_movies = []
 
     async for result in agent.run_movie_streaming(
         user_id=data["user_id"],
@@ -435,7 +435,7 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
             break
         await websocket.send_json(result)
         if result.get("type") == "movie":
-            recommended_kp_ids.append(result.get("movie_id"))
+            recommended_movies.append({"kp_id": result.get("movie_id"), "title": result.get("title_ru")})
 
     if websocket.application_state == WebSocketState.CONNECTED:
         await websocket.send_text("__END__")
@@ -449,8 +449,8 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
             action="stream_complete",
             locale=locale,
             extra={
-                "recommended_kp_ids": recommended_kp_ids,
-                "count": len(recommended_kp_ids),
+                "recommended_movies": recommended_movies,
+                "count": len(recommended_movies),
                 "rerank_used": not skip_rerank,
                 "duration_ms": int((time.time() - stream_start) * 1000),
             },

@@ -176,6 +176,7 @@ class AddSkippedRequest(BaseModel):
     movie_id: int
     platform: Optional[str] = "telegram"  # 'telegram' or 'ios'
     session_id: Optional[str] = None
+    movie_title: Optional[str] = None
 
 
 class MovieObject(TypedDict):
