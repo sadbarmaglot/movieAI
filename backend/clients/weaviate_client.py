@@ -489,32 +489,57 @@ class MovieWeaviateRecommender:
                     avg_vector = self.average_vectors(vectors)
                     
                     if avg_vector:
+                        # Динамический limit: чем больше exclude_set, тем шире ищем (кап 300)
+                        vector_limit = min(100 + len(exclude_kp_ids or set()), 300)
+
                         # Находим ближайшие фильмы к среднему вектору
                         similar_movies = await self.find_similar_by_vector(
                             vector=avg_vector,
-                            limit=100,
+                            limit=vector_limit,
                             exclude_kp_ids=exclude_kp_ids,
                             filters=filters
                         )
-                        
+
                         # Используем только результаты из suggested_titles, не объединяем с основным поиском
                         results = []
                         result_kp_ids_set = set()
-                        
-                        # Добавляем найденные фильмы из suggested_titles
+
+                        # Добавляем найденные фильмы из suggested_titles (не в exclude_set)
                         for movie in found_movies:
                             kp_id = movie.get("kp_id")
-                            if kp_id and kp_id not in result_kp_ids_set:
+                            if kp_id and kp_id not in result_kp_ids_set and kp_id not in (exclude_kp_ids or set()):
                                 results.append(movie)
                                 result_kp_ids_set.add(kp_id)
-                        
+
                         # Добавляем похожие фильмы из векторного поиска
                         for movie in similar_movies:
                             kp_id = movie.get("kp_id")
                             if kp_id and kp_id not in result_kp_ids_set:
                                 results.append(movie)
                                 result_kp_ids_set.add(kp_id)
-                        
+
+                        # Fallback: если вектор-сосед исчерпан — добавляем гибридный поиск
+                        MIN_VECTOR_RESULTS = 20
+                        if len(results) < MIN_VECTOR_RESULTS and query:
+                            logger.info(
+                                f"[WeaviateRecommender] Вектор-поиск вернул мало результатов ({len(results)} < {MIN_VECTOR_RESULTS}), "
+                                f"добавляем гибридный поиск по query"
+                            )
+                            hybrid_results = await self._search_movies(
+                                query=query,
+                                alpha=0.95,
+                                fetch_limit=self.top_k_hybrid,
+                                result_limit=50,
+                                filters=filters,
+                                genres=genres,
+                                exclude_kp_ids=exclude_kp_ids
+                            )
+                            for movie in hybrid_results:
+                                kp_id = movie.get("kp_id")
+                                if kp_id and kp_id not in result_kp_ids_set:
+                                    results.append(movie)
+                                    result_kp_ids_set.add(kp_id)
+
                         distance_weight = 0.7  # 70% релевантность, 30% популярность
                         
                         for movie in results:
