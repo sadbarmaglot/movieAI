@@ -435,7 +435,7 @@ async def handle_movie_agent_streaming(websocket: WebSocket, data: dict, agent: 
             break
         await websocket.send_json(result)
         if result.get("type") == "movie":
-            recommended_movies.append({"kp_id": result.get("movie_id"), "title": result.get("title_ru")})
+            recommended_movies.append({"kp_id": result.get("movie_id"), "title": result.get("name") or result.get("title")})
 
     if websocket.application_state == WebSocketState.CONNECTED:
         await websocket.send_text("__END__")
